@@ -14,6 +14,8 @@ h2 { margin: 0; font-size: 1.2rem; }
 .file-picker:hover { border-color: #1f6a64; background: #f6fbfa; }
 .file-picker span { font-weight: 700; }
 .file-picker small { color: #64748b; overflow-wrap: anywhere; }
+.workbook-picker { cursor: default; }
+.workbook-picker button { width: fit-content; }
 input[type=file] { width: 100%; }
 button { border: 0; background: #165e59; color: white; padding: 11px 16px; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; }
 button:hover:not(:disabled) { background: #0f4945; }

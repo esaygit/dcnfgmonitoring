@@ -14,9 +14,9 @@ type Header = (typeof HEADERS)[number];
 type RecordRow = Record<Header, string>;
 
 const pdfInput = document.querySelector<HTMLInputElement>("#pdf-file")!;
-const workbookInput = document.querySelector<HTMLInputElement>("#workbook-file")!;
+const openWorkbookButton = document.querySelector<HTMLButtonElement>("#open-workbook-button")!;
 const extractButton = document.querySelector<HTMLButtonElement>("#extract-button")!;
-const downloadButton = document.querySelector<HTMLButtonElement>("#download-button")!;
+const saveButton = document.querySelector<HTMLButtonElement>("#save-button")!;
 const addRowButton = document.querySelector<HTMLButtonElement>("#add-row-button")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-button")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
@@ -28,7 +28,8 @@ const workbookName = document.querySelector<HTMLElement>("#workbook-name")!;
 
 let rows: RecordRow[] = [];
 let sourceWorkbook: XLSX.WorkBook | null = null;
-let sourceWorkbookName = "dcnfgmonitoring.xlsx";
+let workbookHandle: FileSystemFileHandle | null = null;
+let saved = false;
 
 function setStatus(message: string, kind: "" | "error" | "success" = "") {
   status.textContent = message;
@@ -37,8 +38,7 @@ function setStatus(message: string, kind: "" | "error" | "success" = "") {
 
 function fileChanged() {
   pdfName.textContent = pdfInput.files?.[0]?.name ?? "No PDF selected";
-  workbookName.textContent = workbookInput.files?.[0]?.name ?? "No workbook selected";
-  extractButton.disabled = !(pdfInput.files?.[0] && workbookInput.files?.[0]);
+  extractButton.disabled = !(pdfInput.files?.[0] && sourceWorkbook && workbookHandle);
   if (!extractButton.disabled) setStatus("Ready to extract. Your files will remain in this browser.");
 }
 
@@ -152,17 +152,12 @@ function appendRowsToSheet(sheet: XLSX.WorkSheet, newRows: RecordRow[]) {
 }
 
 extractButton.addEventListener("click", async () => {
-  const pdf = pdfInput.files?.[0]; const workbook = workbookInput.files?.[0];
-  if (!pdf || !workbook) return;
+  const pdf = pdfInput.files?.[0];
+  if (!pdf || !sourceWorkbook) return;
   try {
-    extractButton.disabled = true; setStatus("Reading your PDF and workbook…");
-    const workbookData = await workbook.arrayBuffer();
-    sourceWorkbook = XLSX.read(workbookData, { type: "array", cellDates: true });
-    const firstSheet = sourceWorkbook.Sheets[sourceWorkbook.SheetNames[0]];
-    if (!firstSheet) throw new Error("The selected workbook has no worksheets.");
-    ensureHeaders(firstSheet);
+    extractButton.disabled = true; setStatus("Reading your PDF…");
     rows = parsePdf(await getPdfText(pdf), pdf.name);
-    sourceWorkbookName = workbook.name;
+    saved = false; saveButton.disabled = false;
     renderRows(); reviewSection.classList.remove("hidden");
     setStatus("Extraction complete. Review the values below, then download the updated workbook.", "success");
   } catch (error) {
@@ -170,15 +165,55 @@ extractButton.addEventListener("click", async () => {
   } finally { extractButton.disabled = false; }
 });
 
-addRowButton.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as RecordRow); renderRows(); });
-
-downloadButton.addEventListener("click", () => {
-  if (!sourceWorkbook || rows.length === 0) return;
-  const sheet = sourceWorkbook.Sheets[sourceWorkbook.SheetNames[0]];
-  appendRowsToSheet(sheet, rows);
-  XLSX.writeFile(sourceWorkbook, sourceWorkbookName.replace(/\.xlsx$/i, "") + "_updated.xlsx", { compression: true });
-  setStatus("Updated workbook downloaded. Replace the local original only after checking the downloaded file.", "success");
+openWorkbookButton.addEventListener("click", async () => {
+  if (!window.showOpenFilePicker) {
+    setStatus("Direct workbook editing requires Microsoft Edge or Google Chrome.", "error");
+    return;
+  }
+  try {
+    setStatus("Choose the local dcnfgmonitoring.xlsx workbook…");
+    const [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{
+        description: "Excel workbook",
+        accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] },
+      }],
+    });
+    const file = await handle.getFile();
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!firstSheet) throw new Error("The selected workbook has no worksheets.");
+    ensureHeaders(firstSheet);
+    workbookHandle = handle;
+    sourceWorkbook = workbook;
+    workbookName.textContent = file.name;
+    fileChanged();
+    if (!pdfInput.files?.[0]) setStatus("Workbook opened. Select an IWTS PDF to continue.", "success");
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") { setStatus("Workbook selection cancelled."); return; }
+    setStatus(error instanceof Error ? error.message : "Could not open the workbook.", "error");
+  }
 });
 
-resetButton.addEventListener("click", () => { pdfInput.value = ""; workbookInput.value = ""; rows = []; sourceWorkbook = null; reviewSection.classList.add("hidden"); fileChanged(); setStatus("Select both files to begin."); });
-pdfInput.addEventListener("change", fileChanged); workbookInput.addEventListener("change", fileChanged);
+addRowButton.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as RecordRow); renderRows(); });
+
+saveButton.addEventListener("click", async () => {
+  if (!sourceWorkbook || !workbookHandle || rows.length === 0 || saved) return;
+  try {
+    saveButton.disabled = true;
+    setStatus("Saving changes to the selected workbook…");
+    const sheet = sourceWorkbook.Sheets[sourceWorkbook.SheetNames[0]];
+    appendRowsToSheet(sheet, rows);
+    const writable = await workbookHandle.createWritable();
+    await writable.write(XLSX.write(sourceWorkbook, { bookType: "xlsx", type: "array", compression: true }));
+    await writable.close();
+    saved = true;
+    setStatus("Saved directly to the selected workbook.", "success");
+  } catch (error) {
+    saveButton.disabled = false;
+    setStatus("Could not save. Close the workbook in Excel and try again. " + (error instanceof Error ? error.message : ""), "error");
+  }
+});
+
+resetButton.addEventListener("click", () => { pdfInput.value = ""; rows = []; sourceWorkbook = null; workbookHandle = null; saved = false; workbookName.textContent = "No workbook opened"; reviewSection.classList.add("hidden"); fileChanged(); setStatus("Select a PDF and open the workbook to begin."); });
+pdfInput.addEventListener("change", fileChanged);
