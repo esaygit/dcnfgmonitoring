@@ -63,10 +63,8 @@ function palletsFromFilename(filename: string) {
 function parsePdf(text: string, filename: string): RecordRow[] {
   const transactionReference = match(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, "");
   const documentDate = match(text, /DOCUMENT\s+DATE\s*:\s*(\d{2}-\d{2}-\d{2})/i);
-  const fromMatch = text.match(/SHIP\s+FROM\s*:\s*(W\d+)\s*(.*?)\s+DOCUMENT\s+DATE/i);
-  const toMatch = text.match(/SHIP\s+TO\s*:\s*(W\d+)\s*(.*?)\s+LOG\s+DATE/i);
-  const transferredFrom = clean([fromMatch?.[1], fromMatch?.[2]].filter(Boolean).join(" "));
-  const transferredTo = clean([toMatch?.[1], toMatch?.[2]].filter(Boolean).join(" "));
+  const transferredFrom = match(text, /SHIP\s+FROM\s*:\s*(W\d+)/i);
+  const transferredTo = match(text, /SHIP\s+TO\s*:\s*(W\d+)/i);
   const palletNumbers = palletsFromFilename(filename);
   const lineItems = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
 
