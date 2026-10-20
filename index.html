@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Local PDF-to-Excel IWTS transfer monitor." />
+    <title>DCN FG Monitoring</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <p class="eyebrow">DCN FG MONITORING</p>
+        <h1>Import an IWTS PDF</h1>
+        <p class="intro">Files are processed only in this browser. Select the local workbook, review extracted records, then download the updated copy.</p>
+      </header>
+
+      <section class="notice" aria-label="Privacy notice">
+        <strong>Local-only workflow:</strong> the PDF and Excel file are not uploaded to GitHub Pages or any server.
+      </section>
+
+      <section class="card upload-card" aria-labelledby="upload-title">
+        <h2 id="upload-title">1. Select files</h2>
+        <div class="upload-grid">
+          <label class="file-picker">
+            <span>IWTS PDF</span>
+            <input id="pdf-file" type="file" accept="application/pdf,.pdf" />
+            <small id="pdf-name">No PDF selected</small>
+          </label>
+          <label class="file-picker">
+            <span>Monitoring workbook</span>
+            <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            <small id="workbook-name">No workbook selected</small>
+          </label>
+        </div>
+        <button id="extract-button" type="button" disabled>Extract records</button>
+        <p id="status" class="status" role="status">Select both files to begin.</p>
+      </section>
+
+      <section id="review-section" class="card hidden" aria-labelledby="review-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="review-title">2. Review extracted records</h2>
+            <p>Check or correct any cell before adding the records to the workbook.</p>
+          </div>
+          <button id="add-row-button" type="button" class="secondary">Add row</button>
+        </div>
+        <div class="table-wrap">
+          <table id="review-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button id="download-button" type="button">Download updated workbook</button>
+          <button id="reset-button" type="button" class="secondary">Start over</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
