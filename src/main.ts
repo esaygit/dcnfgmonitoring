@@ -1,4 +1,6 @@
-import * as XLSX from "xlsx";
+// xlsx-js-style preserves existing cell fills, fonts, borders, and number formats
+// when the selected workbook is written back to disk.
+import * as XLSX from "xlsx-js-style";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./style.css";

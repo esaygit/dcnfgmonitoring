@@ -1,6 +1,10 @@
 # DCN FG Monitoring
 
-A browser-only IWTS importer. It processes the selected PDF and `.xlsx` workbook locally in the browser, then downloads an updated workbook. It does not use a backend or cloud storage.
+A browser-only IWTS importer. It processes the selected PDF and `.xlsx` workbook locally in the browser, then saves approved changes directly back to that user-selected workbook. It does not use a backend or cloud storage.
+
+Use Microsoft Edge or Google Chrome. Users must click **Open monitoring workbook** and select the local `.xlsx` file; browsers do not permit a website to access a predefined PC path. Close the workbook in Excel before saving changes.
+
+The workbook is updated in place while retaining its existing cell formatting, including header colors, borders, and number formats.
 
 ## Local development
 
