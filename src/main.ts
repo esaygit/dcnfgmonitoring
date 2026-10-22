@@ -37,7 +37,12 @@ function message(text = "", kind: "" | "error" | "success" = "") { status.textCo
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
 function isoDate(value: string) { const match = value.match(/^(\d{2})-(\d{2})-(\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
-function displayDate(value: string) { const [year, month, day] = value.split("-"); return year ? `${day}-${month}-${year}` : ""; }
+function normalizedDate(value: string) {
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return isoDate(value);
+}
+function displayDate(value: string) { const [year, month, day] = normalizedDate(value).split("-"); return year ? `${day}-${month}-${year}` : ""; }
 
 async function pdfText(file: File) {
   const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -62,7 +67,10 @@ function renderRows() {
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
 function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
-  return transfers.filter((transfer) => (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!dateFrom || transfer.document_date >= dateFrom) && (!dateTo || transfer.document_date <= dateTo) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item));
+  return transfers.filter((transfer) => {
+    const transferDate = normalizedDate(transfer.document_date);
+    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!dateFrom || transferDate >= dateFrom) && (!dateTo || transferDate <= dateTo) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
+  });
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
 const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
@@ -133,7 +141,7 @@ async function exportToExcel() {
     title(ws, "DCN FG transfer register", `Generated ${displayDate(stamp)}. Filters: ${filterText}. ${list.length} record${list.length === 1 ? "" : "s"}.`, cols.length);
     const head = ws.getRow(4); head.values = cols.map(([name]) => name); header(head, cols.length, [9], [2]);
     list.forEach((transfer, index) => {
-      const [y, m, d] = transfer.document_date.split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
+      const [y, m, d] = normalizedDate(transfer.document_date).split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
       row.values = [transfer.transaction_reference, new Date(Date.UTC(y, m - 1, d)), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", Number(transfer.quantity), transfer.pallets.join(", "), transfer.source_filename ?? "", new Date(created.getTime() - created.getTimezoneOffset() * 60000)];
       row.height = 22;
       for (let col = 1; col <= cols.length; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : col === 2 ? "center" : "left", indent: col === 9 || col === 2 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); }
