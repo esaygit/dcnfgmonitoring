@@ -130,7 +130,7 @@ input[type="email"]:focus, input[type="password"]:focus, input[type="search"]:fo
 .user-panel span { color: var(--ink-2); font-size: 0.85rem; overflow-wrap: anywhere; }
 
 .content { padding: 64px clamp(24px, 5vw, 80px) 96px; max-width: 1360px; width: 100%; }
-.page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+.page { display: grid; gap: 32px; }
 .page-head p { margin-top: 8px; color: var(--ink-2); }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 36px; }
@@ -330,19 +330,6 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
 .legend-value { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Tablet and mobile */
-/* Small laptop / tablet: the sidebar still takes 260px, so the content column is narrow */
-@media (max-width: 1100px) {
-  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat { padding: 28px; }
-  .stat + .stat { border-left: 0; }
-  .stat:nth-child(even) { border-left: 1px solid var(--line); }
-  .stat:nth-child(n+3) { border-top: 1px solid var(--line); }
-  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .kpi-wide { grid-column: span 2; }
-  .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filters .text-button { justify-self: start; }
-}
-
 @media (max-width: 1100px) and (min-width: 901px) {
   .donut-grid { grid-template-columns: 1fr; }
 }
@@ -351,12 +338,10 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
   .auth { grid-template-columns: 1fr; min-height: 0; }
   .auth-brand { padding: 40px 28px; gap: 32px; }
   .auth-panel { padding: 40px 28px 56px; }
-  .shell { grid-template-columns: minmax(0, 1fr); }
+  .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { padding: 0; }
-  .nav { grid-auto-flow: column; grid-auto-columns: max-content; order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .nav::-webkit-scrollbar { display: none; }
-  .nav a { white-space: nowrap; }
+  .nav { grid-auto-flow: column; order: 3; width: 100%; overflow-x: auto; }
   .user-panel { margin: 0 0 0 auto; grid-auto-flow: column; align-items: center; padding: 0; }
   .user-panel span { display: none; }
   .content { padding: 40px 20px 72px; }
@@ -376,62 +361,10 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
   .donut-grid { grid-template-columns: 1fr; gap: 24px; }
   .chart-key { display: none; }
   .toolbar { flex-direction: column; }
-  .filters { gap: 16px; }
+  .filters { grid-template-columns: 1fr; gap: 16px; }
   .text-button { justify-self: start; padding: 4px; }
   .search-label { max-width: none; }
   .actions button { flex: 1; }
-}
-
-/* Phones / small tablets: tables turn into stacked cards (labels come from data-label, set in main.ts) */
-@media (max-width: 720px) {
-  input, select { font-size: 16px; }
-  .table-wrap { overflow: visible; margin: 0; padding: 0; }
-  :is(#records-table, #review-table, #analytics-table, #recent-table, #export-preview) { min-width: 0; }
-  table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  table, tbody, tbody tr { display: block; }
-  tbody tr { margin-bottom: 14px; padding: 6px 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
-  tbody tr:last-child { margin-bottom: 0; }
-  :is(#records-table, #review-table, #analytics-table, #recent-table, #export-preview) td:nth-child(n) {
-    display: grid; grid-template-columns: minmax(88px, 36%) minmax(0, 1fr); gap: 12px; align-items: start;
-    width: auto; min-width: 0; max-width: none; padding: 10px 16px; border: 0;
-    text-align: left; white-space: normal; overflow-wrap: anywhere;
-  }
-  :is(#records-table, #review-table, #analytics-table, #recent-table, #export-preview) tbody tr:nth-child(n):not(.possible-duplicate) td:nth-child(n) { background: transparent; }
-  :is(#records-table, #review-table, #analytics-table, #recent-table, #export-preview) td:not([data-label]) { display: block; }
-  td[data-label]::before { content: attr(data-label); padding-top: 3px; color: var(--ink-2); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
-  :is(#records-table, #recent-table, #export-preview) td.stacked { white-space: pre; }
-  #review-table td:nth-child(n) input { min-width: 0; text-align: left; }
-  td.empty { padding: 32px 16px; text-align: center; }
-}
-
-@media (max-width: 560px) {
-  h1 { font-size: 1.6rem; }
-  .content { padding: 28px 16px 56px; }
-  .page { gap: 24px; }
-  .panel { padding: 18px; }
-  .stats { grid-template-columns: 1fr; }
-  .stat { padding: 18px 20px; }
-  .stat strong { font-size: 1.8rem; }
-  .stat:nth-child(n) { border-left: 0; border-top: 0; }
-  .stat + .stat { border-top: 1px solid var(--line); }
-  .kpi { padding: 16px; }
-  .kpi strong { font-size: 1.35rem; }
-  .filters { grid-template-columns: 1fr; }
-  .mini-stats { gap: 20px 32px; margin-bottom: 24px; }
-  .mini-stats strong { font-size: 1.5rem; }
-  .section-heading { margin-bottom: 20px; }
-  .section-heading > button { width: 100%; }
-  .analytics-bar-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
-  .analytics-bar-label { grid-column: 1; grid-row: 1; }
-  .analytics-bar-value { grid-column: 2; grid-row: 1; }
-  .analytics-bar-track { grid-column: 1 / -1; grid-row: 2; }
-  .file-picker { padding: 24px 18px; }
-}
-
-@media (max-width: 360px) {
-  .kpi-grid { grid-template-columns: 1fr; }
-  .kpi-wide { grid-column: auto; }
-  :is(#records-table, #review-table, #analytics-table, #recent-table, #export-preview) td[data-label]:nth-child(n) { grid-template-columns: 1fr; gap: 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
