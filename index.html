@@ -89,18 +89,36 @@
         <section class="page hidden" data-page="analytics">
           <header class="page-head">
             <h1>Analytics</h1>
-            <p>Saved transfer volume and activity by item code.</p>
+            <p>Saved transfer volume and activity by PPM group and item code.</p>
           </header>
 
-          <div class="panel mini-stats analytics-stats">
-            <div><span>Item codes</span><strong id="analytics-item-count">0</strong></div>
-            <div><span>Total quantity</span><strong id="analytics-total-quantity">0</strong></div>
-            <div><span>Highest-volume item</span><strong id="analytics-largest-item">—</strong></div>
+          <div class="kpi-grid">
+            <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small>All saved records</small></div>
+            <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-ppm10-quantity">0</strong><small id="analytics-ppm10-share">0% of total</small></div>
+            <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-ppm50-quantity">0</strong><small id="analytics-ppm50-share">0% of total</small></div>
+            <div class="kpi"><span>Item codes</span><strong id="analytics-item-count">0</strong><small>With saved records</small></div>
+            <div class="kpi kpi-wide"><span>Highest-volume item</span><strong id="analytics-largest-item">—</strong><small id="analytics-largest-desc">&nbsp;</small></div>
+          </div>
+
+          <div class="donut-grid">
+            <div class="panel donut-panel">
+              <div class="section-heading">
+                <div><h2><span class="group-dot ppm-10"></span>10 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+              </div>
+              <div id="analytics-donut-10" class="donut-card"></div>
+            </div>
+            <div class="panel donut-panel">
+              <div class="section-heading">
+                <div><h2><span class="group-dot ppm-50"></span>50 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+              </div>
+              <div id="analytics-donut-50" class="donut-card"></div>
+            </div>
           </div>
 
           <div class="panel">
             <div class="section-heading">
               <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity across the saved register.</p></div>
+              <div class="chart-key" aria-hidden="true"><span><i class="group-dot ppm-10"></i>10 PPM</span><span><i class="group-dot ppm-50"></i>50 PPM</span></div>
             </div>
             <div id="analytics-chart" class="analytics-chart"></div>
           </div>

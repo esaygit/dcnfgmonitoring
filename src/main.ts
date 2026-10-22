@@ -119,6 +119,26 @@ function renderTransfers() {
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
   renderRecent(); renderExport(); renderAnalytics();
 }
+const DONUT_COLORS = ["#1f6fa5", "#79beee", "#3fb6a8", "#f2b84b"];
+const GROUP_CLASS: Record<string, string> = { "10 PPM": "ppm-10", "50 PPM": "ppm-50" };
+const GROUP_OF = new Map<string, string>(ITEM_GROUPS.flatMap(({ group, items }) => items.map(([code]) => [code, group] as [string, string])));
+const fmt = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const pct = (part: number, whole: number) => whole > 0 ? `${(part / whole * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : "0%";
+function renderDonut(container: HTMLElement, group: string, quantities: Map<string, number>) {
+  const entry = ITEM_GROUPS.find((candidate) => candidate.group === group)!;
+  const slices = entry.items.map(([code, name], index) => ({ code, name, quantity: quantities.get(code) ?? 0, color: DONUT_COLORS[index % DONUT_COLORS.length] }));
+  const total = slices.reduce((sum, slice) => sum + slice.quantity, 0);
+  const radius = 72, circumference = 2 * Math.PI * radius, active = slices.filter((slice) => slice.quantity > 0).length, gap = active > 1 ? 3 : 0;
+  let offset = 0;
+  const arcs = slices.filter((slice) => slice.quantity > 0).map((slice) => {
+    const length = slice.quantity / total * circumference, visible = Math.max(length - gap, 0.01);
+    const arc = `<circle class="donut-arc" cx="100" cy="100" r="${radius}" fill="none" stroke="${slice.color}" stroke-width="26" stroke-dasharray="${visible} ${circumference - visible}" stroke-dashoffset="${-offset}" transform="rotate(-90 100 100)"><title>${slice.name}: ${fmt(slice.quantity)} (${pct(slice.quantity, total)})</title></circle>`;
+    offset += length;
+    return arc;
+  }).join("");
+  const legend = slices.map((slice) => `<li class="${slice.quantity ? "" : "is-zero"}"><i style="background:${slice.color}"></i><span class="legend-name"><strong>${slice.name}</strong><small>${slice.code}</small></span><span class="legend-value"><strong>${fmt(slice.quantity)}</strong><small>${pct(slice.quantity, total)}</small></span></li>`).join("");
+  container.innerHTML = `<div class="donut-figure"><svg viewBox="0 0 200 200" class="donut-svg" role="img" aria-label="${group} quantity by item code, total ${fmt(total)}"><circle cx="100" cy="100" r="${radius}" fill="none" stroke="var(--tint)" stroke-width="26"/>${arcs}</svg><div class="donut-center"><strong>${fmt(total)}</strong><span>${total ? "Total quantity" : "No data yet"}</span></div></div><ul class="donut-legend">${legend}</ul>`;
+}
 function renderAnalytics() {
   const byItem = new Map<string, { description: string; records: number; quantity: number; batches: Set<string>; pallets: Set<string>; destinations: Set<string>; latestDate: string }>();
   for (const transfer of transfers) {
@@ -141,6 +161,16 @@ function renderAnalytics() {
   $<HTMLElement>("#analytics-item-count").textContent = String(items.length);
   $<HTMLElement>("#analytics-total-quantity").textContent = totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
   $<HTMLElement>("#analytics-largest-item").textContent = largestItem ? largestItem[0] : "—";
+  $<HTMLElement>("#analytics-largest-desc").textContent = largestItem ? `${largestItem[1].description || "No description"} · ${fmt(largestItem[1].quantity)}` : "\u00a0";
+  const quantities = new Map(items.map(([code, item]) => [code, item.quantity] as [string, number]));
+  const groupTotal = (group: string) => items.reduce((sum, [code, item]) => GROUP_OF.get(code) === group ? sum + item.quantity : sum, 0);
+  const ppm10 = groupTotal("10 PPM"), ppm50 = groupTotal("50 PPM");
+  $<HTMLElement>("#analytics-ppm10-quantity").textContent = fmt(ppm10);
+  $<HTMLElement>("#analytics-ppm50-quantity").textContent = fmt(ppm50);
+  $<HTMLElement>("#analytics-ppm10-share").textContent = `${pct(ppm10, totalQuantity)} of total`;
+  $<HTMLElement>("#analytics-ppm50-share").textContent = `${pct(ppm50, totalQuantity)} of total`;
+  renderDonut($<HTMLElement>("#analytics-donut-10"), "10 PPM", quantities);
+  renderDonut($<HTMLElement>("#analytics-donut-50"), "50 PPM", quantities);
   analyticsChart.innerHTML = "";
   analyticsBody.innerHTML = "";
   if (!items.length) {
@@ -167,7 +197,7 @@ function renderAnalytics() {
     track.setAttribute("role", "img");
     track.setAttribute("aria-label", `${code}: ${item.quantity.toLocaleString()} total quantity`);
     const bar = document.createElement("span");
-    bar.className = "analytics-bar";
+    bar.className = `analytics-bar ${GROUP_CLASS[GROUP_OF.get(code) ?? ""] ?? ""}`;
     bar.style.width = `${maximum > 0 ? item.quantity / maximum * 100 : 0}%`;
     track.append(bar);
     const value = document.createElement("strong");
