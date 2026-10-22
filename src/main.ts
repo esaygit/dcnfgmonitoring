@@ -132,8 +132,15 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
 const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
+// Pallets are merged across the batches and wrapped to PALLETS_PER_LINE per line (fixed-width column).
+const PALLETS_PER_LINE = 3;
+function palletLines(pallets: string[]) {
+  const lines: string[] = [];
+  for (let i = 0; i < pallets.length; i += PALLETS_PER_LINE) lines.push(pallets.slice(i, i + PALLETS_PER_LINE).join(", "));
+  return lines.map((line, index) => (index < lines.length - 1 ? `${line},` : line)).join("\n");
+}
 // One transaction can span several batch codes. Rows that share every other identifying value are shown once;
-// batch code and quantity are per-batch, so they are stacked one line per batch (same order); pallets are merged into a single comma-separated line.
+// batch code and quantity are per-batch, so they are stacked one line per batch (same order); pallets are merged and wrapped 3 per line.
 function groupTransfers(list: Transfer[]) {
   const groups = new Map<string, Transfer[]>();
   for (const transfer of list) {
@@ -143,6 +150,7 @@ function groupTransfers(list: Transfer[]) {
   }
   return [...groups.values()];
 }
+const stackLines = (members: Transfer[], pick: (transfer: Transfer) => string) => members.map((transfer) => pick(transfer) || (members.length > 1 ? "—" : "")).join("\n");
 function renderTransfers() {
   const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
@@ -155,8 +163,8 @@ function renderTransfers() {
   groups.forEach((members) => {
     const [first] = members, tr = document.createElement("tr");
     if (members.some(savedRecordIsDuplicate)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; }
-    const stack = (pick: (transfer: Transfer) => string) => members.map((transfer) => pick(transfer) || (members.length > 1 ? "—" : "")).join("\n");
-    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), [...new Set(members.flatMap((transfer) => transfer.pallets))].join(", ")].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 7 || index === 8) td.className = "stacked"; tr.append(td); });
+    const stack = (pick: (transfer: Transfer) => string) => stackLines(members, pick);
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 7) td.className = "stacked"; tr.append(td); });
     recordsBody.append(tr);
   });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
@@ -274,14 +282,22 @@ function renderExport() {
   const list = exportTransfers();
   exRecords.textContent = String(list.length); exQuantity.textContent = list.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0).toLocaleString(); exReferences.textContent = String(new Set(list.map((transfer) => transfer.transaction_reference)).size);
   exBody.innerHTML = "";
-  list.slice(0, 5).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_to, transfer.description, transfer.batch_code ?? "", String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); exBody.append(tr); });
+  groupTransfers(list).slice(0, 5).forEach((members) => {
+    const [first] = members, tr = document.createElement("tr");
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_to, first.description, stackLines(members, (transfer) => transfer.batch_code ?? ""), stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 4) td.className = index === 5 ? "num stacked" : "stacked"; tr.append(td); });
+    exBody.append(tr);
+  });
   if (!list.length) emptyRow(exBody, 6, transfers.length ? "No records match these filters." : "No transfers yet. Import an IWTS PDF first.");
   exportButton.disabled = !list.length;
 }
 function emptyRow(body: HTMLTableSectionElement, columns: number, text: string) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = columns; td.className = "empty"; td.textContent = text; tr.append(td); body.append(tr); }
 function renderRecent() {
   recentBody.innerHTML = "";
-  transfers.slice(0, 6).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_from, transfer.transferred_to, transfer.description, String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); recentBody.append(tr); });
+  groupTransfers(transfers).slice(0, 6).forEach((members) => {
+    const [first] = members, tr = document.createElement("tr");
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.description, stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num stacked"; tr.append(td); });
+    recentBody.append(tr);
+  });
   if (!transfers.length) emptyRow(recentBody, 6, "Nothing here yet. Import an IWTS PDF to see your latest transfers.");
 }
 const PAGES = ["overview", "analytics", "import", "records", "export"];
