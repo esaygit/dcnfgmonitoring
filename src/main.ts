@@ -159,7 +159,7 @@ function renderTransfers() {
   const duplicateCount = duplicateRows.length;
   recordsDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
   recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
-  const groups = groupTransfers(shown); recordsDescription.textContent = `${shown.length} of ${transfers.length} records` + (groups.length < shown.length ? ` · batches of the same transaction are shown together (${groups.length} rows)` : ""); recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
+  const groups = groupTransfers(shown); recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
   groups.forEach((members) => {
     const [first] = members, tr = document.createElement("tr");
     if (members.some(savedRecordIsDuplicate)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; }
@@ -467,19 +467,3 @@ window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 route();
 renderExport();
-
-// Phones show tables as stacked cards; each cell carries its column header so the card can label it (see style.css).
-function makeTablesResponsive() {
-  document.querySelectorAll<HTMLTableElement>("table").forEach((table) => {
-    const label = () => {
-      const heads = [...table.querySelectorAll("thead th")].map((th) => th.textContent?.trim() ?? "");
-      table.querySelectorAll<HTMLTableRowElement>("tbody tr").forEach((row) => [...row.cells].forEach((cell, index) => {
-        if (cell.colSpan > 1 || !heads[index]) return;
-        if (cell.dataset.label !== heads[index]) cell.dataset.label = heads[index];
-      }));
-    };
-    label();
-    new MutationObserver(label).observe(table, { childList: true, subtree: true });
-  });
-}
-makeTablesResponsive();
