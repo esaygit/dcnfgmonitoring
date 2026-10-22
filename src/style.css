@@ -223,6 +223,9 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
 #records-table td:nth-child(9) { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #records-table td:nth-child(10) { min-width: 120px; max-width: 200px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 
+/* Batch / quantity / pallets: one line per batch, kept in step across the three columns */
+#records-table td.stacked { white-space: pre; max-width: none; }
+
 /* Other tables: keep key columns on one line */
 #recent-table td:first-child, #export-preview td:first-child, #analytics-table td:first-child { font-weight: 700; white-space: nowrap; }
 #recent-table td:nth-child(2), #recent-table td:nth-child(3) { white-space: nowrap; }

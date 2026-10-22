@@ -132,6 +132,17 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
 const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
+// One transaction can span several batch codes. Rows that share every other identifying value are shown once;
+// batch code, quantity and pallets are per-batch, so they are stacked one line per batch (same order in all three).
+function groupTransfers(list: Transfer[]) {
+  const groups = new Map<string, Transfer[]>();
+  for (const transfer of list) {
+    const key = [transfer.transaction_reference, transfer.document_date, transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? ""].join("\u0001");
+    const group = groups.get(key);
+    if (group) group.push(transfer); else groups.set(key, [transfer]);
+  }
+  return [...groups.values()];
+}
 function renderTransfers() {
   const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
@@ -140,8 +151,14 @@ function renderTransfers() {
   const duplicateCount = duplicateRows.length;
   recordsDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
   recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
-  recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
-  shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); recordsBody.append(tr); });
+  const groups = groupTransfers(shown); recordsDescription.textContent = `${shown.length} of ${transfers.length} records` + (groups.length < shown.length ? ` · batches of the same transaction are shown together (${groups.length} rows)` : ""); recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
+  groups.forEach((members) => {
+    const [first] = members, tr = document.createElement("tr");
+    if (members.some(savedRecordIsDuplicate)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; }
+    const stack = (pick: (transfer: Transfer) => string) => members.map((transfer) => pick(transfer) || (members.length > 1 ? "—" : "")).join("\n");
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), stack((transfer) => transfer.pallets.join(", "))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 7) td.className = "stacked"; tr.append(td); });
+    recordsBody.append(tr);
+  });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
   renderRecent(); renderExport(); renderAnalytics();
 }
