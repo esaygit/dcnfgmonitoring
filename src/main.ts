@@ -36,7 +36,7 @@ let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null 
 function message(text = "", kind: "" | "error" | "success" = "") { status.textContent = text; status.className = `status ${kind}`; }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
-function isoDate(value: string) { const match = value.match(/^(\d{2})-(\d{2})-(\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
+function isoDate(value: string) { const match = value.trim().match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
 function normalizedDate(value: string) {
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
@@ -67,9 +67,10 @@ function renderRows() {
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
 function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
+  const from = normalizedDate(dateFrom), to = normalizedDate(dateTo);
   return transfers.filter((transfer) => {
     const transferDate = normalizedDate(transfer.document_date);
-    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!dateFrom || transferDate >= dateFrom) && (!dateTo || transferDate <= dateTo) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
+    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!from || transferDate >= from) && (!to || transferDate <= to) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
   });
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
@@ -116,7 +117,8 @@ async function exportToExcel() {
     const fill = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
     const hair = { style: "thin" as const, color: { argb: LINE } };
     const now = new Date(), stamp = now.toISOString().slice(0, 10);
-    const filters = [exDateFrom.value ? `Date from ${displayDate(exDateFrom.value)}` : "", exDateTo.value ? `Date to ${displayDate(exDateTo.value)}` : "", exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
+    const exportFrom = normalizedDate(exDateFrom.value), exportTo = normalizedDate(exDateTo.value);
+    const filters = [exportFrom ? `Date from ${displayDate(exportFrom)}` : "", exportTo ? `Date to ${displayDate(exportTo)}` : "", exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
     const filterText = filters.length ? filters.join("; ") : "none (all records)";
     const total = list.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
     const whole = list.every((transfer) => Number.isInteger(Number(transfer.quantity)));
@@ -183,7 +185,7 @@ async function exportToExcel() {
     const timestampParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now).reduce<Record<string, string>>((parts, part) => ({ ...parts, [part.type]: part.value }), {});
     const generatedAt = `${timestampParts.year}${timestampParts.month}${timestampParts.day}-${timestampParts.hour}${timestampParts.minute}`;
     const safeBatch = exBatch.value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
-    const filenameParts = ["dcn-fg-transfers", exDateFrom.value ? `from-${exDateFrom.value.replaceAll("-", "")}` : "", exDateTo.value ? `to-${exDateTo.value.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", `generated-${generatedAt}`].filter(Boolean);
+    const filenameParts = ["dcn-fg-transfers", exportFrom ? `from-${exportFrom.replaceAll("-", "")}` : "", exportTo ? `to-${exportTo.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", `generated-${generatedAt}`].filter(Boolean);
     link.download = `${filenameParts.join("_")}.xlsx`; document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 2000);
     message(`${list.length} record${list.length === 1 ? "" : "s"} exported to Excel.`, "success");

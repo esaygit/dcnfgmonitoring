@@ -201,8 +201,8 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
 .field { display: grid; gap: 8px; font-weight: 600; font-size: 0.9rem; }
 .field-hint { color: var(--ink-2); font-size: .75rem; font-weight: 500; }
 .field input, .field select { width: 100%; }
-.field input[type="date"] { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); color: var(--ink); }
-.field input[type="date"]:focus { outline: none; border-color: var(--sky); background: var(--surface); box-shadow: 0 0 0 4px #79beee33; }
+.field input[type="date"], .field input[type="text"] { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); color: var(--ink); }
+.field input[type="date"]:focus, .field input[type="text"]:focus { outline: none; border-color: var(--sky); background: var(--surface); box-shadow: 0 0 0 4px #79beee33; }
 select {
   border: 1px solid var(--line);
   border-radius: 12px;
