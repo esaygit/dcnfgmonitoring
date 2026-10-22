@@ -53,7 +53,6 @@ function message(text = "", kind: "" | "error" | "success" = "", duration = 5000
 }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
-function isoDate(value: string) { const match = value.trim().match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
 function normalizedDate(value: string) {
   const date = value.trim();
   const iso = date.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T)/);
@@ -69,6 +68,7 @@ function normalizedDate(value: string) {
   if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return "";
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
+function isoDate(value: string) { return normalizedDate(value); }
 function displayDate(value: string) { const [year, month, day] = normalizedDate(value).split("-"); return year ? `${day}-${month}-${year}` : ""; }
 
 async function pdfText(file: File) {
@@ -86,7 +86,8 @@ function batchesFromFilename(filename: string) {
   return [...name.matchAll(/\b([A-Z0-9]{5,}(?:-[A-Z0-9]+)*)\s+(\d+(?:\.\d+)?)\s*BAGS?\b/gi)].map((match) => ({ batch: match[1], quantity: match[2] }));
 }
 function parse(text: string, filename: string): ParsedImport {
-  const base = { "Transaction Reference": matched(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, ""), "Document Date": matched(text, /DOCUMENT\s+DATE\s*:\s*(\d{2}-\d{2}-\d{2})/i), "Transferred From": matched(text, /SHIP\s+FROM\s*:\s*(W\d+)/i), "Transferred To": matched(text, /SHIP\s+TO\s*:\s*(W\d+)/i), "Pallets": pallets(filename) };
+  const documentDate = matched(text, /DOCUMENT\s+DATE\s*:\s*((?:\d{4}[-/]\d{1,2}[-/]\d{1,2})|(?:\d{1,2}[-/]\d{1,2}[-/]\d{2,4}))/i);
+  const base = { "Transaction Reference": matched(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, ""), "Document Date": normalizedDate(documentDate), "Transferred From": matched(text, /SHIP\s+FROM\s*:\s*(W\d+)/i), "Transferred To": matched(text, /SHIP\s+TO\s*:\s*(W\d+)/i), "Pallets": pallets(filename) };
   const items = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
   const filenameBatches = batchesFromFilename(filename);
   const itemRows = items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
