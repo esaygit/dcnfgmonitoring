@@ -36,7 +36,21 @@ function fillItems(select: HTMLSelectElement) {
 fillItems(itemFilter); fillItems(exItem);
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
-function message(text = "", kind: "" | "error" | "success" = "") { status.textContent = text; status.className = `status ${kind}`; }
+let messageTimeout: ReturnType<typeof setTimeout> | undefined;
+function message(text = "", kind: "" | "error" | "success" = "", duration = 5000) {
+  if (messageTimeout) clearTimeout(messageTimeout);
+  status.textContent = text;
+  status.className = `status ${kind}`;
+  if (text && duration > 0) {
+    messageTimeout = setTimeout(() => {
+      status.textContent = "";
+      status.className = "status";
+      messageTimeout = undefined;
+    }, duration);
+  } else {
+    messageTimeout = undefined;
+  }
+}
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
 function isoDate(value: string) { const match = value.trim().match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
@@ -252,7 +266,7 @@ async function loadTransfers() { if (!supabase || !session) return; recordsDescr
 async function exportToExcel() {
   const list = exportTransfers();
   if (!list.length) { message("There are no records to export.", "error"); return; }
-  exportButton.disabled = true; message("Building workbook…");
+  exportButton.disabled = true; message("Building workbook…", "", 0);
   try {
     const { default: ExcelJS } = await import("exceljs");
     const INK = "FF0F2A3A", SKY = "FF79BEEE", TINT = "FFEEF7FD", BAND = "FFF7FBFE", LINE = "FFD3E4F0", MUTED = "FF4D6779";
@@ -339,22 +353,68 @@ async function saveRows() {
   const file = pdf.files?.[0]; if (!supabase || !file || !rows.length) return;
   const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: file.name }));
   if (data.some((row) => !row.transaction_reference || !row.document_date || !row.transferred_from || !row.transferred_to || !row.item_code || !row.description || !Number.isFinite(row.quantity))) { message("Complete all required fields and use a valid document date and quantity before saving.", "error"); return; }
-  save.disabled = true; message("Saving records to the shared dashboard…"); const { error } = await supabase.from("transfers").insert(data); save.disabled = false; if (error) { message(`Could not save records: ${error.message}`, "error"); return; } pdf.value = ""; pdfName.textContent = "No PDF selected"; rows = []; review.classList.add("hidden"); message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success"); await loadTransfers(); location.hash = "#/records";
+  save.disabled = true;
+  message("Saving records to the shared dashboard…", "", 0);
+  let saveError: string | undefined;
+  try {
+    const { error } = await supabase.from("transfers").insert(data);
+    saveError = error?.message;
+  } catch (error) {
+    saveError = error instanceof Error ? error.message : "Unexpected error.";
+  } finally {
+    save.disabled = false;
+  }
+  if (saveError) { message(`Could not save records: ${saveError}`, "error"); return; }
+  pdf.value = ""; pdfName.textContent = "No PDF selected"; rows = []; review.classList.add("hidden"); message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success"); await loadTransfers(); location.hash = "#/records";
 }
 function showSession(next: Session | null) { session = next; const signedIn = Boolean(next); authSection.classList.toggle("hidden", signedIn); dashboard.classList.toggle("hidden", !signedIn); userPanel.classList.toggle("hidden", !signedIn); userEmail.textContent = next?.user.email ?? ""; if (signedIn) { void loadTransfers(); route(); } }
 
 if (!supabase) { message("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to GitHub Actions secrets.", "error"); signIn.disabled = true; signUp.disabled = true; } else {
   supabase.auth.onAuthStateChange((_event, next) => showSession(next)); supabase.auth.getSession().then(({ data }) => showSession(data.session)); supabase.channel("transfers-live").on("postgres_changes", { event: "*", schema: "public", table: "transfers" }, () => void loadTransfers()).subscribe();
 }
-authForm.addEventListener("submit", async (event) => { event.preventDefault(); if (!supabase) return; signIn.disabled = true; message("Signing in…"); const { error } = await supabase.auth.signInWithPassword({ email: email.value, password: password.value }); signIn.disabled = false; if (error) message(error.message, "error"); });
-signUp.addEventListener("click", async () => { if (!supabase || !email.reportValidity() || !password.reportValidity()) return; signUp.disabled = true; message("Creating account…"); const { error } = await supabase.auth.signUp({ email: email.value, password: password.value, options: { emailRedirectTo: window.location.href } }); signUp.disabled = false; message(error ? error.message : "Account created. Check your email to confirm it before signing in.", error ? "error" : "success"); });
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!supabase) return;
+  signIn.disabled = true;
+  message("Signing in…", "", 0);
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email: email.value, password: password.value });
+    message(error ? error.message : "", error ? "error" : "");
+  } catch (error) {
+    message(error instanceof Error ? error.message : "Could not sign in. Please try again.", "error");
+  } finally {
+    signIn.disabled = false;
+  }
+});
+signUp.addEventListener("click", async () => {
+  if (!supabase || !email.reportValidity() || !password.reportValidity()) return;
+  signUp.disabled = true;
+  message("Creating account…", "", 0);
+  try {
+    const { error } = await supabase.auth.signUp({ email: email.value, password: password.value, options: { emailRedirectTo: window.location.href } });
+    message(error ? error.message : "Account created. Check your email to confirm it before signing in.", error ? "error" : "success");
+  } catch (error) {
+    message(error instanceof Error ? error.message : "Could not create account. Please try again.", "error");
+  } finally {
+    signUp.disabled = false;
+  }
+});
 signOut.addEventListener("click", async () => { if (supabase) await supabase.auth.signOut(); });
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
-extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); const parsed = parse(await pdfText(file), file.name); rows = parsed.rows; renderRows(); review.classList.remove("hidden"); message(parsed.filenameBatches > 1 ? `${parsed.filenameBatches} batch entries found in the filename. Review the split records before saving.` : "Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
+extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…", "", 0); const parsed = parse(await pdfText(file), file.name); rows = parsed.rows; renderRows(); review.classList.remove("hidden"); message(parsed.filenameBatches > 1 ? `${parsed.filenameBatches} batch entries found in the filename. Review the split records before saving.` : "Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
 for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
 for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
 clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
 exClear.addEventListener("click", () => { exDateFrom.value = ""; exDateTo.value = ""; exBatch.value = ""; exItem.value = ""; renderExport(); });
 exportButton.addEventListener("click", () => void exportToExcel());
-window.addEventListener("hashchange", route); route(); renderExport();
+document.addEventListener("click", (event) => {
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#/"]') : null;
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (link.target && link.target !== "_self")) return;
+  event.preventDefault();
+  if (location.hash !== link.hash) location.hash = link.hash;
+  route();
+});
+window.addEventListener("hashchange", route);
+route();
+renderExport();
