@@ -53,14 +53,14 @@ function message(text = "", kind: "" | "error" | "success" = "", duration = 5000
 }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
-function normalizedDate(value: string) {
+function normalizedDate(value: string, monthFirst = false) {
   const date = value.trim();
   const iso = date.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T)/);
   const dayFirst = date.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
   const parts = iso
     ? [Number(iso[1]), Number(iso[2]), Number(iso[3])]
     : dayFirst
-      ? [Number(dayFirst[3].length === 2 ? `20${dayFirst[3]}` : dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1])]
+      ? [Number(dayFirst[3].length === 2 ? `20${dayFirst[3]}` : dayFirst[3]), Number(monthFirst ? dayFirst[1] : dayFirst[2]), Number(monthFirst ? dayFirst[2] : dayFirst[1])]
       : [];
   if (parts.length !== 3) return "";
   const [year, month, day] = parts;
@@ -69,7 +69,7 @@ function normalizedDate(value: string) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 function isoDate(value: string) { return normalizedDate(value); }
-function displayDate(value: string) { const [year, month, day] = normalizedDate(value).split("-"); return year ? `${day}-${month}-${year}` : ""; }
+function displayDate(value: string, monthFirst = false) { const [year, month, day] = normalizedDate(value, monthFirst).split("-"); return year ? `${day}-${month}-${year}` : ""; }
 
 async function pdfText(file: File) {
   const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -125,7 +125,7 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
   const from = normalizedDate(dateFrom), to = normalizedDate(dateTo);
   return transfers.filter((transfer) => {
-    const transferDate = normalizedDate(transfer.document_date);
+    const transferDate = normalizedDate(transfer.document_date, true);
     const withinDateRange = (!from && !to) || (Boolean(transferDate) && (!from || transferDate >= from) && (!to || transferDate <= to));
     return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && withinDateRange && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
   });
@@ -141,7 +141,7 @@ function renderTransfers() {
   recordsDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
   recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
-  shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); recordsBody.append(tr); });
+  shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); recordsBody.append(tr); });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
   renderRecent(); renderExport(); renderAnalytics();
 }
@@ -177,7 +177,7 @@ function renderAnalytics() {
     if (transfer.batch_code) item.batches.add(transfer.batch_code.trim());
     normalizedPallets(transfer.pallets).forEach((pallet) => item.pallets.add(pallet));
     if (transfer.transferred_to) item.destinations.add(transfer.transferred_to);
-    const date = normalizedDate(transfer.document_date);
+    const date = normalizedDate(transfer.document_date, true);
     if (date > item.latestDate) item.latestDate = date;
     byItem.set(code, item);
   }
@@ -257,14 +257,14 @@ function renderExport() {
   const list = exportTransfers();
   exRecords.textContent = String(list.length); exQuantity.textContent = list.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0).toLocaleString(); exReferences.textContent = String(new Set(list.map((transfer) => transfer.transaction_reference)).size);
   exBody.innerHTML = "";
-  list.slice(0, 5).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_to, transfer.description, transfer.batch_code ?? "", String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); exBody.append(tr); });
+  list.slice(0, 5).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_to, transfer.description, transfer.batch_code ?? "", String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); exBody.append(tr); });
   if (!list.length) emptyRow(exBody, 6, transfers.length ? "No records match these filters." : "No transfers yet. Import an IWTS PDF first.");
   exportButton.disabled = !list.length;
 }
 function emptyRow(body: HTMLTableSectionElement, columns: number, text: string) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = columns; td.className = "empty"; td.textContent = text; tr.append(td); body.append(tr); }
 function renderRecent() {
   recentBody.innerHTML = "";
-  transfers.slice(0, 6).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.description, String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); recentBody.append(tr); });
+  transfers.slice(0, 6).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date, true), transfer.transferred_from, transfer.transferred_to, transfer.description, String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); recentBody.append(tr); });
   if (!transfers.length) emptyRow(recentBody, 6, "Nothing here yet. Import an IWTS PDF to see your latest transfers.");
 }
 const PAGES = ["overview", "analytics", "import", "records", "export"];
@@ -311,7 +311,7 @@ async function exportToExcel() {
     title(ws, "DCN FG transfer register", `Generated ${displayDate(stamp)}. Filters: ${filterText}. ${list.length} record${list.length === 1 ? "" : "s"}.`, cols.length);
     const head = ws.getRow(4); head.values = cols.map(([name]) => name); header(head, cols.length, [9], [2]);
     list.forEach((transfer, index) => {
-      const [y, m, d] = normalizedDate(transfer.document_date).split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
+      const [y, m, d] = normalizedDate(transfer.document_date, true).split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
       row.values = [transfer.transaction_reference, new Date(Date.UTC(y, m - 1, d)), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", Number(transfer.quantity), transfer.pallets.join(", "), transfer.source_filename ?? "", new Date(created.getTime() - created.getTimezoneOffset() * 60000)];
       row.height = 22;
       for (let col = 1; col <= cols.length; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : col === 2 ? "center" : "left", indent: col === 9 || col === 2 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); }
