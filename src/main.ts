@@ -85,11 +85,13 @@ function hasPossibleDuplicate(row: ImportRow, index?: number) {
   return savedMatch || importMatch;
 }
 function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet({ quantity: transfer.quantity, pallets: transfer.pallets }, { quantity: other.quantity, pallets: other.pallets })); }
+function transactionReferences(values: string[]) { return [...new Set(values.map((value) => clean(value) || "not entered"))].join(", "); }
 function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
-  const duplicateCount = rows.filter((row, index) => hasPossibleDuplicate(row, index)).length;
+  const duplicateRows = rows.filter((row, index) => hasPossibleDuplicate(row, index));
+  const duplicateCount = duplicateRows.length;
   reviewDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
-  reviewDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted row${duplicateCount === 1 ? "" : "s"} match the quantity and at least one pallet of another row or saved record. Check before saving.` : "";
+  reviewDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted row${duplicateCount === 1 ? "" : "s"} match the quantity and at least one pallet of another row or saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
   rows.forEach((row, index) => { const tr = document.createElement("tr"); if (hasPossibleDuplicate(row, index)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: a matching quantity and pallet number exists."; } HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; renderRows(); }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
@@ -107,9 +109,10 @@ function renderTransfers() {
   const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
   $<HTMLElement>("#total-records").textContent = String(transfers.length); $<HTMLElement>("#total-quantity").textContent = quantity.toLocaleString(); $<HTMLElement>("#total-references").textContent = String(new Set(transfers.map((transfer) => transfer.transaction_reference)).size); $<HTMLElement>("#total-destinations").textContent = String(new Set(transfers.map((transfer) => transfer.transferred_to)).size);
-  const duplicateCount = shown.filter(savedRecordIsDuplicate).length;
+  const duplicateRows = shown.filter(savedRecordIsDuplicate);
+  const duplicateCount = duplicateRows.length;
   recordsDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
-  recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record.` : "";
+  recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
   shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); recordsBody.append(tr); });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
