@@ -55,9 +55,19 @@ function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g,
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
 function isoDate(value: string) { const match = value.trim().match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
 function normalizedDate(value: string) {
-  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  return isoDate(value);
+  const date = value.trim();
+  const iso = date.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T)/);
+  const dayFirst = date.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
+  const parts = iso
+    ? [Number(iso[1]), Number(iso[2]), Number(iso[3])]
+    : dayFirst
+      ? [Number(dayFirst[3].length === 2 ? `20${dayFirst[3]}` : dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1])]
+      : [];
+  if (parts.length !== 3) return "";
+  const [year, month, day] = parts;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 function displayDate(value: string) { const [year, month, day] = normalizedDate(value).split("-"); return year ? `${day}-${month}-${year}` : ""; }
 
@@ -115,7 +125,8 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const from = normalizedDate(dateFrom), to = normalizedDate(dateTo);
   return transfers.filter((transfer) => {
     const transferDate = normalizedDate(transfer.document_date);
-    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!from || transferDate >= from) && (!to || transferDate <= to) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
+    const withinDateRange = (!from && !to) || (Boolean(transferDate) && (!from || transferDate >= from) && (!to || transferDate <= to));
+    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && withinDateRange && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
   });
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
