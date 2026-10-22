@@ -399,7 +399,23 @@ signUp.addEventListener("click", async () => {
     signUp.disabled = false;
   }
 });
-signOut.addEventListener("click", async () => { if (supabase) await supabase.auth.signOut(); });
+signOut.addEventListener("click", async () => {
+  if (!supabase) return;
+  signOut.disabled = true;
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      message(`Could not sign out: ${error.message}`, "error");
+      return;
+    }
+    showSession(null);
+    message("Signed out successfully.", "success");
+  } catch (error) {
+    message(error instanceof Error ? `Could not sign out: ${error.message}` : "Could not sign out. Please try again.", "error");
+  } finally {
+    signOut.disabled = false;
+  }
+});
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
 extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…", "", 0); const parsed = parse(await pdfText(file), file.name); rows = parsed.rows; renderRows(); review.classList.remove("hidden"); message(parsed.filenameBatches > 1 ? `${parsed.filenameBatches} batch entries found in the filename. Review the split records before saving.` : "Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
@@ -412,9 +428,10 @@ document.addEventListener("click", (event) => {
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#/"]') : null;
   if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (link.target && link.target !== "_self")) return;
   event.preventDefault();
-  if (location.hash !== link.hash) location.hash = link.hash;
+  if (location.hash !== link.hash) history.pushState(null, "", link.hash);
   route();
-});
+}, true);
+window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 route();
 renderExport();
