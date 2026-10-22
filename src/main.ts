@@ -53,7 +53,7 @@ function message(text = "", kind: "" | "error" | "success" = "", duration = 5000
 }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
-function normalizedDate(value: string, monthFirst = false) {
+function normalizedDate(value: string, monthFirst = true) {
   const date = value.trim();
   const iso = date.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T)/);
   const dayFirst = date.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
@@ -69,7 +69,7 @@ function normalizedDate(value: string, monthFirst = false) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 function isoDate(value: string) { return normalizedDate(value); }
-function displayDate(value: string, monthFirst = false) { const [year, month, day] = normalizedDate(value, monthFirst).split("-"); return year ? `${day}-${month}-${year}` : ""; }
+function displayDate(value: string, monthFirst = true) { const [year, month, day] = normalizedDate(value, monthFirst).split("-"); return year ? `${month}-${day}-${year}` : ""; }
 
 async function pdfText(file: File) {
   const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
