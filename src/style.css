@@ -174,6 +174,7 @@ input[type="email"]:focus, input[type="password"]:focus, input[type="search"]:fo
 .duplicate-warning { margin: 0 0 18px; padding: 12px 16px; border: 1px solid #f1d28b; border-radius: 12px; background: #fff4d6; color: #765000; font-weight: 700; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
 #records-table, #review-table { min-width: 1180px; }
+#analytics-table { min-width: 1040px; }
 #recent-table { min-width: 720px; }
 #export-preview { min-width: 720px; }
 th { text-align: left; padding: 0 16px 14px; color: var(--ink-2); font-size: 0.8rem; font-weight: 700; white-space: nowrap; border-bottom: 1px solid var(--line); }
@@ -224,6 +225,16 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
 .mini-stats div { display: grid; gap: 6px; }
 .mini-stats span { color: var(--ink-2); font-size: 0.9rem; font-weight: 600; }
 .mini-stats strong { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.analytics-stats { margin-bottom: 0; }
+.analytics-chart { display: grid; gap: 18px; }
+.analytics-bar-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 2fr) minmax(90px, auto); align-items: center; gap: 20px; }
+.analytics-bar-label { display: grid; min-width: 0; }
+.analytics-bar-label strong, .analytics-bar-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-bar-label span { color: var(--ink-2); font-size: 0.82rem; }
+.analytics-bar-track { height: 14px; overflow: hidden; border-radius: 999px; background: var(--tint); }
+.analytics-bar { display: block; height: 100%; border-radius: inherit; background: var(--sky-deep); }
+.analytics-bar-value { text-align: right; font-variant-numeric: tabular-nums; }
+.analytics-empty { padding: 12px 0; }
 .preview-label { margin-bottom: 12px; font-size: 0.9rem; font-weight: 600; }
 
 /* Tablet and mobile */
@@ -246,6 +257,7 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
   .stat:nth-child(n+3) { border-top: 1px solid var(--line); }
   .stat:first-child { border-radius: var(--radius) 0 0 0; }
   .section-heading { flex-direction: column; gap: 16px; }
+  .analytics-bar-row { grid-template-columns: minmax(100px, 1fr) minmax(60px, 1fr) minmax(64px, auto); gap: 10px; }
   .toolbar { flex-direction: column; }
   .filters { grid-template-columns: 1fr; gap: 16px; }
   .text-button { justify-self: start; padding: 4px; }

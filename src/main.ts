@@ -21,6 +21,7 @@ const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
+const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
 const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
 const exDateFrom = $<HTMLInputElement>("#export-date-from-filter"), exDateTo = $<HTMLInputElement>("#export-date-to-filter"), exBatch = $<HTMLInputElement>("#export-batch-filter"), exItem = $<HTMLSelectElement>("#export-item-filter"), exClear = $<HTMLButtonElement>("#export-clear-button"), exportButton = $<HTMLButtonElement>("#export-button"), exRecords = $<HTMLElement>("#export-records"), exQuantity = $<HTMLElement>("#export-quantity"), exReferences = $<HTMLElement>("#export-references"), exBody = $<HTMLTableSectionElement>("#export-preview tbody");
 
@@ -116,7 +117,85 @@ function renderTransfers() {
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
   shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); recordsBody.append(tr); });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
-  renderRecent(); renderExport();
+  renderRecent(); renderExport(); renderAnalytics();
+}
+function renderAnalytics() {
+  const byItem = new Map<string, { description: string; records: number; quantity: number; batches: Set<string>; pallets: Set<string>; destinations: Set<string>; latestDate: string }>();
+  for (const transfer of transfers) {
+    const code = clean(transfer.item_code);
+    if (!code) continue;
+    const item = byItem.get(code) ?? { description: clean(transfer.description), records: 0, quantity: 0, batches: new Set<string>(), pallets: new Set<string>(), destinations: new Set<string>(), latestDate: "" };
+    item.records++;
+    item.quantity += Number.isFinite(Number(transfer.quantity)) ? Number(transfer.quantity) : 0;
+    if (!item.description && transfer.description) item.description = clean(transfer.description);
+    if (transfer.batch_code) item.batches.add(transfer.batch_code.trim());
+    normalizedPallets(transfer.pallets).forEach((pallet) => item.pallets.add(pallet));
+    if (transfer.transferred_to) item.destinations.add(transfer.transferred_to);
+    const date = normalizedDate(transfer.document_date);
+    if (date > item.latestDate) item.latestDate = date;
+    byItem.set(code, item);
+  }
+  const items = [...byItem].sort((left, right) => right[1].quantity - left[1].quantity || left[0].localeCompare(right[0]));
+  const totalQuantity = items.reduce((sum, [, item]) => sum + item.quantity, 0);
+  const largestItem = items[0];
+  $<HTMLElement>("#analytics-item-count").textContent = String(items.length);
+  $<HTMLElement>("#analytics-total-quantity").textContent = totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  $<HTMLElement>("#analytics-largest-item").textContent = largestItem ? largestItem[0] : "—";
+  analyticsChart.innerHTML = "";
+  analyticsBody.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted analytics-empty";
+    empty.textContent = "No item-code analytics yet. Import records to see the breakdown.";
+    analyticsChart.append(empty);
+    emptyRow(analyticsBody, 9, "No saved records with an item code.");
+    return;
+  }
+  const maximum = Math.max(...items.map(([, item]) => item.quantity));
+  for (const [code, item] of items) {
+    const chartRow = document.createElement("div");
+    chartRow.className = "analytics-bar-row";
+    const label = document.createElement("div");
+    label.className = "analytics-bar-label";
+    const name = document.createElement("strong");
+    name.textContent = code;
+    const description = document.createElement("span");
+    description.textContent = item.description || "No description";
+    label.append(name, description);
+    const track = document.createElement("div");
+    track.className = "analytics-bar-track";
+    track.setAttribute("role", "img");
+    track.setAttribute("aria-label", `${code}: ${item.quantity.toLocaleString()} total quantity`);
+    const bar = document.createElement("span");
+    bar.className = "analytics-bar";
+    bar.style.width = `${maximum > 0 ? item.quantity / maximum * 100 : 0}%`;
+    track.append(bar);
+    const value = document.createElement("strong");
+    value.className = "analytics-bar-value";
+    value.textContent = item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    chartRow.append(label, track, value);
+    analyticsChart.append(chartRow);
+
+    const tr = document.createElement("tr");
+    const cells = [
+      code,
+      item.description || "—",
+      String(item.records),
+      item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      (item.quantity / item.records).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      String(item.batches.size),
+      String(item.pallets.size),
+      String(item.destinations.size),
+      item.latestDate ? displayDate(item.latestDate) : "—",
+    ];
+    cells.forEach((text, index) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (index >= 2 && index <= 7) td.className = "num";
+      tr.append(td);
+    });
+    analyticsBody.append(tr);
+  }
 }
 function renderExport() {
   const list = exportTransfers();
@@ -132,7 +211,7 @@ function renderRecent() {
   transfers.slice(0, 6).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.description, String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); recentBody.append(tr); });
   if (!transfers.length) emptyRow(recentBody, 6, "Nothing here yet. Import an IWTS PDF to see your latest transfers.");
 }
-const PAGES = ["overview", "import", "records", "export"];
+const PAGES = ["overview", "analytics", "import", "records", "export"];
 function route() {
   const name = location.hash.replace(/^#\//, ""), current = PAGES.includes(name) ? name : "overview";
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));

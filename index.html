@@ -45,6 +45,7 @@
         <a class="brand" href="#/overview"><span class="logo" aria-hidden="true"></span>DCN FG</a>
         <nav class="nav" aria-label="Main">
           <a href="#/overview" data-nav="overview">Overview</a>
+          <a href="#/analytics" data-nav="analytics">Analytics</a>
           <a href="#/import" data-nav="import">Import</a>
           <a href="#/records" data-nav="records">Records</a>
           <a href="#/export" data-nav="export">Export</a>
@@ -78,6 +79,39 @@
             <div class="table-wrap">
               <table id="recent-table">
                 <thead><tr><th>Reference</th><th>Date</th><th>From</th><th>To</th><th>Description</th><th class="num">Quantity</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Analytics -->
+        <section class="page hidden" data-page="analytics">
+          <header class="page-head">
+            <h1>Analytics</h1>
+            <p>Saved transfer volume and activity by item code.</p>
+          </header>
+
+          <div class="panel mini-stats analytics-stats">
+            <div><span>Item codes</span><strong id="analytics-item-count">0</strong></div>
+            <div><span>Total quantity</span><strong id="analytics-total-quantity">0</strong></div>
+            <div><span>Highest-volume item</span><strong id="analytics-largest-item">—</strong></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity across the saved register.</p></div>
+            </div>
+            <div id="analytics-chart" class="analytics-chart"></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <div><h2>Item code details</h2><p class="muted">Record volume, quantities, inventory identifiers, destinations, and latest activity.</p></div>
+            </div>
+            <div class="table-wrap">
+              <table id="analytics-table">
+                <thead><tr><th>Item Code</th><th>Description</th><th class="num">Records</th><th class="num">Total Quantity</th><th class="num">Average Quantity</th><th class="num">Batches</th><th class="num">Pallets</th><th class="num">Destinations</th><th>Latest Transfer</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
