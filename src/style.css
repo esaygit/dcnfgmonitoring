@@ -171,6 +171,7 @@ input[type="email"]:focus, input[type="password"]:focus, input[type="search"]:fo
 .search-label input { width: 100%; }
 .table-wrap { overflow-x: auto; margin: 0 -8px; padding: 0 8px; }
 .filters + .table-wrap { margin-top: 28px; }
+.duplicate-warning { margin: 0 0 18px; padding: 12px 16px; border: 1px solid #f1d28b; border-radius: 12px; background: #fff4d6; color: #765000; font-weight: 700; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
 #records-table, #review-table { min-width: 1180px; }
 #recent-table { min-width: 720px; }
