@@ -13,6 +13,7 @@ const HEADERS = ["Transaction Reference", "Document Date", "Transferred From", "
 type Header = (typeof HEADERS)[number];
 type ImportRow = Record<Header, string>;
 type Transfer = { id: string; transaction_reference: string; document_date: string; transferred_from: string; transferred_to: string; item_code: string; description: string; product_code: string | null; batch_code: string | null; quantity: number; pallets: string[]; source_filename: string | null; created_at: string };
+type ParsedImport = { rows: ImportRow[]; filenameBatches: number };
 
 const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!;
 const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email");
@@ -54,15 +55,38 @@ async function pdfText(file: File) {
   return pages.join("\n");
 }
 function pallets(filename: string) { const part = filename.replace(/\.pdf$/i, "").match(/\bPALLETS?\s+(.+?)(?=\s+\d{8}\b|$)/i)?.[1] ?? ""; return (part.match(/\b\d{3,6}\b/g) ?? []).join(", "); }
-function parse(text: string, filename: string): ImportRow[] {
+function batchesFromFilename(filename: string) {
+  const name = filename.replace(/\.pdf$/i, "");
+  return [...name.matchAll(/\b([A-Z0-9]{5,}(?:-[A-Z0-9]+)*)\s+(\d+(?:\.\d+)?)\s*BAGS?\b/gi)].map((match) => ({ batch: match[1], quantity: match[2] }));
+}
+function parse(text: string, filename: string): ParsedImport {
   const base = { "Transaction Reference": matched(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, ""), "Document Date": matched(text, /DOCUMENT\s+DATE\s*:\s*(\d{2}-\d{2}-\d{2})/i), "Transferred From": matched(text, /SHIP\s+FROM\s*:\s*(W\d+)/i), "Transferred To": matched(text, /SHIP\s+TO\s*:\s*(W\d+)/i), "Pallets": pallets(filename) };
   const items = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
-  if (!items.length) return [{ ...base, "Item Code": "", "Description": "", "Product Code": "", "Batch Code": "", "Quantity": "" }];
-  return items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
+  const filenameBatches = batchesFromFilename(filename);
+  const itemRows = items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
+  if (filenameBatches.length > 1 && itemRows.length <= 1) {
+    const template = itemRows[0] ?? { ...base, "Item Code": "", "Description": "", "Product Code": "", "Batch Code": "", "Quantity": "" };
+    return { rows: filenameBatches.map(({ batch, quantity }) => ({ ...template, "Batch Code": batch, Quantity: quantity })), filenameBatches: filenameBatches.length };
+  }
+  if (!itemRows.length) return { rows: [{ ...base, "Item Code": "", "Description": "", "Product Code": "", "Batch Code": "", "Quantity": "" }], filenameBatches: filenameBatches.length };
+  return { rows: itemRows, filenameBatches: filenameBatches.length };
 }
+function normalizedPallets(value: string | string[]) { return (Array.isArray(value) ? value : value.split(",")).map((pallet) => pallet.trim()).filter(Boolean); }
+function sameQuantityAndPallet(left: { quantity: string | number; pallets: string | string[] }, right: { quantity: string | number; pallets: string | string[] }) {
+  const leftQuantity = String(left.quantity).replace(/,/g, "").trim(), rightQuantity = String(right.quantity).replace(/,/g, "").trim();
+  if (!leftQuantity || !rightQuantity || !Number.isFinite(Number(leftQuantity)) || Number(leftQuantity) !== Number(rightQuantity)) return false;
+  const rightPallets = new Set(normalizedPallets(right.pallets).map((pallet) => pallet.toLowerCase()));
+  return normalizedPallets(left.pallets).some((pallet) => rightPallets.has(pallet.toLowerCase()));
+}
+function hasPossibleDuplicate(row: ImportRow, index?: number) {
+  const savedMatch = transfers.some((transfer) => sameQuantityAndPallet({ quantity: row.Quantity, pallets: row.Pallets }, { quantity: transfer.quantity, pallets: transfer.pallets }));
+  const importMatch = index === undefined ? false : rows.some((other, otherIndex) => otherIndex !== index && sameQuantityAndPallet({ quantity: row.Quantity, pallets: row.Pallets }, { quantity: other.Quantity, pallets: other.Pallets }));
+  return savedMatch || importMatch;
+}
+function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet({ quantity: transfer.quantity, pallets: transfer.pallets }, { quantity: other.quantity, pallets: other.pallets })); }
 function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
-  rows.forEach((row, index) => { const tr = document.createElement("tr"); HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
+  rows.forEach((row, index) => { const tr = document.createElement("tr"); if (hasPossibleDuplicate(row, index)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: a matching quantity and pallet number exists."; } HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; renderRows(); }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
 function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
@@ -80,7 +104,7 @@ function renderTransfers() {
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
   $<HTMLElement>("#total-records").textContent = String(transfers.length); $<HTMLElement>("#total-quantity").textContent = quantity.toLocaleString(); $<HTMLElement>("#total-references").textContent = String(new Set(transfers.map((transfer) => transfer.transaction_reference)).size); $<HTMLElement>("#total-destinations").textContent = String(new Set(transfers.map((transfer) => transfer.transferred_to)).size);
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; recordsBody.innerHTML = "";
-  shown.forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Delete"; remove.addEventListener("click", () => void deleteTransfer(transfer.id)); td.append(remove); tr.append(td); recordsBody.append(tr); });
+  shown.forEach((transfer) => { const tr = document.createElement("tr"); if (savedRecordIsDuplicate(transfer)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; } [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Delete"; remove.addEventListener("click", () => void deleteTransfer(transfer.id)); td.append(remove); tr.append(td); recordsBody.append(tr); });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length + 1, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
   renderRecent(); renderExport();
 }
@@ -208,7 +232,7 @@ authForm.addEventListener("submit", async (event) => { event.preventDefault(); i
 signUp.addEventListener("click", async () => { if (!supabase || !email.reportValidity() || !password.reportValidity()) return; signUp.disabled = true; message("Creating account…"); const { error } = await supabase.auth.signUp({ email: email.value, password: password.value, options: { emailRedirectTo: window.location.href } }); signUp.disabled = false; message(error ? error.message : "Account created. Check your email to confirm it before signing in.", error ? "error" : "success"); });
 signOut.addEventListener("click", async () => { if (supabase) await supabase.auth.signOut(); });
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
-extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); rows = parse(await pdfText(file), file.name); renderRows(); review.classList.remove("hidden"); message("Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
+extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); const parsed = parse(await pdfText(file), file.name); rows = parsed.rows; renderRows(); review.classList.remove("hidden"); message(parsed.filenameBatches > 1 ? `${parsed.filenameBatches} batch entries found in the filename. Review the split records before saving.` : "Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
 for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
 for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }

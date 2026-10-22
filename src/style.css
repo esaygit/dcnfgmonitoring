@@ -193,6 +193,11 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
   color: var(--ink);
 }
 #review-table td input:focus { outline: none; border-color: var(--sky); background: var(--surface); box-shadow: 0 0 0 4px #79beee33; }
+#review-table tbody tr.possible-duplicate td,
+#records-table tbody tr.possible-duplicate td { background: #fff4d6; border-bottom-color: #f1d28b; }
+#review-table tbody tr.possible-duplicate td:first-child,
+#records-table tbody tr.possible-duplicate td:first-child { box-shadow: inset 3px 0 #d99a00; }
+#review-table tbody tr.possible-duplicate input { background: #fff9e8; }
 .remove-row { padding: 8px 12px; background: transparent; color: var(--danger); font-size: 0.85rem; }
 .remove-row:hover:not(:disabled) { background: #fdeeeb; }
 
