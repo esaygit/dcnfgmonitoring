@@ -1,10 +1,12 @@
 # DCN FG Monitoring
 
-A browser-only IWTS importer. It processes the selected PDF and `.xlsx` workbook locally in the browser, then saves approved changes directly back to that user-selected workbook. It does not use a backend or cloud storage.
+A shared IWTS monitoring dashboard. The browser extracts data from an uploaded PDF and saves reviewed records to Supabase PostgreSQL. All signed-in users see database changes live.
 
-Use Microsoft Edge or Google Chrome. Users must click **Open monitoring workbook** and select the local `.xlsx` file; browsers do not permit a website to access a predefined PC path. Close the workbook in Excel before saving changes.
+## Supabase configuration
 
-The workbook is updated in place while retaining its existing cell formatting, including header colors, borders, and number formats.
+Create `.env.local` using `.env.example`, then add the Supabase **Project URL** and **Publishable key**. Never use a `service_role` key in this frontend.
+
+For GitHub Pages, add repository Actions secrets named `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. The deployment workflow uses them only while building the static site.
 
 ## Local development
 
@@ -13,7 +15,7 @@ npm install
 npm run dev
 ```
 
-## GitHub Pages
+## Deployment
 
 1. Create a GitHub repository named `dcnfgmonitoring` and push this project to its `main` branch.
 2. In GitHub, open **Settings → Pages** and set **Source** to **GitHub Actions**.

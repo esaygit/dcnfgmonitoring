@@ -1,3 +1,4 @@
 node_modules/
 dist/
 *.xlsx_updated.xlsx
+.env.local

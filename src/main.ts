@@ -1,219 +1,74 @@
-// xlsx-js-style preserves existing cell fills, fonts, borders, and number formats
-// when the selected workbook is written back to disk.
-import * as XLSX from "xlsx-js-style";
+import { createClient, type Session } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./style.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const HEADERS = [
-  "Transaction Reference", "Document Date", "Transferred From", "Transferred To",
-  "Item Code", "Description", "Product Code", "Batch Code", "Quantity", "Pallets",
-] as const;
-
+const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const supabase = url && key ? createClient(url, key) : null;
+const HEADERS = ["Transaction Reference", "Document Date", "Transferred From", "Transferred To", "Item Code", "Description", "Product Code", "Batch Code", "Quantity", "Pallets"] as const;
 type Header = (typeof HEADERS)[number];
-type RecordRow = Record<Header, string>;
+type ImportRow = Record<Header, string>;
+type Transfer = { id: string; transaction_reference: string; document_date: string; transferred_from: string; transferred_to: string; item_code: string; description: string; product_code: string | null; batch_code: string | null; quantity: number; pallets: string[]; source_filename: string | null; created_at: string };
 
-const pdfInput = document.querySelector<HTMLInputElement>("#pdf-file")!;
-const openWorkbookButton = document.querySelector<HTMLButtonElement>("#open-workbook-button")!;
-const extractButton = document.querySelector<HTMLButtonElement>("#extract-button")!;
-const saveButton = document.querySelector<HTMLButtonElement>("#save-button")!;
-const addRowButton = document.querySelector<HTMLButtonElement>("#add-row-button")!;
-const resetButton = document.querySelector<HTMLButtonElement>("#reset-button")!;
-const status = document.querySelector<HTMLParagraphElement>("#status")!;
-const reviewSection = document.querySelector<HTMLElement>("#review-section")!;
-const tableHead = document.querySelector<HTMLTableSectionElement>("#review-table thead")!;
-const tableBody = document.querySelector<HTMLTableSectionElement>("#review-table tbody")!;
-const pdfName = document.querySelector<HTMLElement>("#pdf-name")!;
-const workbookName = document.querySelector<HTMLElement>("#workbook-name")!;
+const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!;
+const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email");
+const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signUp = $<HTMLButtonElement>("#sign-up-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
+const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
+const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description");
 
-let rows: RecordRow[] = [];
-let sourceWorkbook: XLSX.WorkBook | null = null;
-let workbookHandle: FileSystemFileHandle | null = null;
-let saved = false;
-
-function setStatus(message: string, kind: "" | "error" | "success" = "") {
-  status.textContent = message;
-  status.className = `status ${kind}`;
-}
-
-function fileChanged() {
-  pdfName.textContent = pdfInput.files?.[0]?.name ?? "No PDF selected";
-  extractButton.disabled = !(pdfInput.files?.[0] && sourceWorkbook && workbookHandle);
-  if (!extractButton.disabled) setStatus("Ready to extract. Your files will remain in this browser.");
-}
-
+let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
+function message(text = "", kind: "" | "error" | "success" = "") { status.textContent = text; status.className = `status ${kind}`; }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
-function match(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
-async function getPdfText(file: File) {
+function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
+function isoDate(value: string) { const match = value.match(/^(\d{2})-(\d{2})-(\d{2}|\d{4})$/); return match ? `${match[3].length === 2 ? `20${match[3]}` : match[3]}-${match[2]}-${match[1]}` : ""; }
+function displayDate(value: string) { const [year, month, day] = value.split("-"); return year ? `${day}-${month}-${year}` : ""; }
+
+async function pdfText(file: File) {
   const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const pages: string[] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
-    const content = await (await document.getPage(pageNumber)).getTextContent();
+  for (let page = 1; page <= document.numPages; page++) {
+    const content = await (await document.getPage(page)).getTextContent();
     pages.push(content.items.map((item) => "str" in item ? item.str : "").join(" "));
   }
   return pages.join("\n");
 }
-
-function palletsFromFilename(filename: string) {
-  const base = filename.replace(/\.pdf$/i, "");
-  const palletPart = base.match(/\bPALLETS?\s+(.+?)(?=\s+\d{8}\b|$)/i)?.[1] ?? "";
-  return (palletPart.match(/\b\d{3,6}\b/g) ?? []).join(", ");
+function pallets(filename: string) { const part = filename.replace(/\.pdf$/i, "").match(/\bPALLETS?\s+(.+?)(?=\s+\d{8}\b|$)/i)?.[1] ?? ""; return (part.match(/\b\d{3,6}\b/g) ?? []).join(", "); }
+function parse(text: string, filename: string): ImportRow[] {
+  const base = { "Transaction Reference": matched(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, ""), "Document Date": matched(text, /DOCUMENT\s+DATE\s*:\s*(\d{2}-\d{2}-\d{2})/i), "Transferred From": matched(text, /SHIP\s+FROM\s*:\s*(W\d+)/i), "Transferred To": matched(text, /SHIP\s+TO\s*:\s*(W\d+)/i), "Pallets": pallets(filename) };
+  const items = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
+  if (!items.length) return [{ ...base, "Item Code": "", "Description": "", "Product Code": "", "Batch Code": "", "Quantity": "" }];
+  return items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
 }
-
-function parsePdf(text: string, filename: string): RecordRow[] {
-  const transactionReference = match(text, /\b(GAA\s*\d{4,})\b/i).replace(/\s+/g, "");
-  const documentDate = match(text, /DOCUMENT\s+DATE\s*:\s*(\d{2}-\d{2}-\d{2})/i);
-  const transferredFrom = match(text, /SHIP\s+FROM\s*:\s*(W\d+)/i);
-  const transferredTo = match(text, /SHIP\s+TO\s*:\s*(W\d+)/i);
-  const palletNumbers = palletsFromFilename(filename);
-  const lineItems = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
-
-  if (lineItems.length === 0) {
-    return [{
-      "Transaction Reference": transactionReference,
-      "Document Date": documentDate,
-      "Transferred From": transferredFrom,
-      "Transferred To": transferredTo,
-      "Item Code": "",
-      "Description": "",
-      "Product Code": "",
-      "Batch Code": "",
-      "Quantity": "",
-      "Pallets": palletNumbers,
-    }];
-  }
-
-  return lineItems.map((item) => ({
-    "Transaction Reference": transactionReference,
-    "Document Date": documentDate,
-    "Transferred From": transferredFrom,
-    "Transferred To": transferredTo,
-    "Item Code": clean(item[1]),
-    "Description": clean(item[2]),
-    "Product Code": clean(item[3]),
-    "Batch Code": clean(item[4]),
-    "Quantity": clean(item[5]),
-    "Pallets": palletNumbers,
-  }));
-}
-
 function renderRows() {
-  tableHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th aria-label="Remove row"></th></tr>`;
-  tableBody.innerHTML = "";
-  rows.forEach((row, rowIndex) => {
-    const tr = document.createElement("tr");
-    for (const header of HEADERS) {
-      const td = document.createElement("td");
-      const input = document.createElement("input");
-      input.value = row[header];
-      input.setAttribute("aria-label", `${header}, row ${rowIndex + 1}`);
-      input.addEventListener("input", () => { rows[rowIndex][header] = input.value; });
-      td.append(input);
-      tr.append(td);
-    }
-    const action = document.createElement("td");
-    const remove = document.createElement("button");
-    remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove";
-    remove.addEventListener("click", () => { rows.splice(rowIndex, 1); renderRows(); });
-    action.append(remove); tr.append(action); tableBody.append(tr);
-  });
+  reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
+  rows.forEach((row, index) => { const tr = document.createElement("tr"); HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
-
-function ensureHeaders(sheet: XLSX.WorkSheet) {
-  const firstRow = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false })[0] ?? [];
-  const actual = firstRow.map((value) => clean(String(value)));
-  const missing = HEADERS.filter((header) => !actual.includes(header));
-  if (missing.length) throw new Error(`The selected workbook is missing these headers: ${missing.join(", ")}.`);
+function renderTransfers() {
+  const query = search.value.trim().toLowerCase(); const shown = transfers.filter((transfer) => !query || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(query)));
+  const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
+  $<HTMLElement>("#total-records").textContent = String(transfers.length); $<HTMLElement>("#total-quantity").textContent = quantity.toLocaleString(); $<HTMLElement>("#total-references").textContent = String(new Set(transfers.map((transfer) => transfer.transaction_reference)).size); $<HTMLElement>("#total-destinations").textContent = String(new Set(transfers.map((transfer) => transfer.transferred_to)).size);
+  recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; recordsBody.innerHTML = "";
+  shown.forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Delete"; remove.addEventListener("click", () => void deleteTransfer(transfer.id)); td.append(remove); tr.append(td); recordsBody.append(tr); });
 }
-
-function appendRowsToSheet(sheet: XLSX.WorkSheet, newRows: RecordRow[]) {
-  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1");
-  const headerColumns = new Map<string, number>();
-  for (let column = range.s.c; column <= range.e.c; column++) {
-    const header = clean(String(sheet[XLSX.utils.encode_cell({ r: 0, c: column })]?.v ?? ""));
-    if (header) headerColumns.set(header, column);
-  }
-  let lastDataRow = 0;
-  for (let row = 1; row <= range.e.r; row++) {
-    if ([...headerColumns.values()].some((column) => sheet[XLSX.utils.encode_cell({ r: row, c: column })]?.v !== undefined)) lastDataRow = row;
-  }
-  newRows.forEach((record, offset) => {
-    const row = lastDataRow + 1 + offset;
-    for (const header of HEADERS) {
-      const column = headerColumns.get(header);
-      if (column === undefined) continue;
-      sheet[XLSX.utils.encode_cell({ r: row, c: column })] = { t: "s", v: record[header] };
-      range.e.r = Math.max(range.e.r, row);
-    }
-  });
-  sheet["!ref"] = XLSX.utils.encode_range(range);
+async function loadTransfers() { if (!supabase || !session) return; recordsDescription.textContent = "Loading records…"; const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000); if (error) { message(`Could not load records: ${error.message}`, "error"); return; } transfers = (data ?? []) as Transfer[]; renderTransfers(); }
+async function deleteTransfer(id: string) { if (!supabase || !confirm("Delete this transfer record?")) return; const { error } = await supabase.from("transfers").delete().eq("id", id); if (error) message(`Could not delete record: ${error.message}`, "error"); }
+async function saveRows() {
+  const file = pdf.files?.[0]; if (!supabase || !file || !rows.length) return;
+  const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: file.name }));
+  if (data.some((row) => !row.transaction_reference || !row.document_date || !row.transferred_from || !row.transferred_to || !row.item_code || !row.description || !Number.isFinite(row.quantity))) { message("Complete all required fields and use a valid document date and quantity before saving.", "error"); return; }
+  save.disabled = true; message("Saving records to the shared dashboard…"); const { error } = await supabase.from("transfers").insert(data); save.disabled = false; if (error) { message(`Could not save records: ${error.message}`, "error"); return; } message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success"); pdf.value = ""; pdfName.textContent = "No PDF selected"; rows = []; review.classList.add("hidden");
 }
+function showSession(next: Session | null) { session = next; const signedIn = Boolean(next); authSection.classList.toggle("hidden", signedIn); dashboard.classList.toggle("hidden", !signedIn); userPanel.classList.toggle("hidden", !signedIn); userEmail.textContent = next?.user.email ?? ""; if (signedIn) void loadTransfers(); }
 
-extractButton.addEventListener("click", async () => {
-  const pdf = pdfInput.files?.[0];
-  if (!pdf || !sourceWorkbook) return;
-  try {
-    extractButton.disabled = true; setStatus("Reading your PDF…");
-    rows = parsePdf(await getPdfText(pdf), pdf.name);
-    saved = false; saveButton.disabled = false;
-    renderRows(); reviewSection.classList.remove("hidden");
-    setStatus("Extraction complete. Review the values below, then download the updated workbook.", "success");
-  } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Could not process the files.", "error");
-  } finally { extractButton.disabled = false; }
-});
-
-openWorkbookButton.addEventListener("click", async () => {
-  if (!window.showOpenFilePicker) {
-    setStatus("Direct workbook editing requires Microsoft Edge or Google Chrome.", "error");
-    return;
-  }
-  try {
-    setStatus("Choose the local dcnfgmonitoring.xlsx workbook…");
-    const [handle] = await window.showOpenFilePicker({
-      multiple: false,
-      types: [{
-        description: "Excel workbook",
-        accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] },
-      }],
-    });
-    const file = await handle.getFile();
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!firstSheet) throw new Error("The selected workbook has no worksheets.");
-    ensureHeaders(firstSheet);
-    workbookHandle = handle;
-    sourceWorkbook = workbook;
-    workbookName.textContent = file.name;
-    fileChanged();
-    if (!pdfInput.files?.[0]) setStatus("Workbook opened. Select an IWTS PDF to continue.", "success");
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") { setStatus("Workbook selection cancelled."); return; }
-    setStatus(error instanceof Error ? error.message : "Could not open the workbook.", "error");
-  }
-});
-
-addRowButton.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as RecordRow); renderRows(); });
-
-saveButton.addEventListener("click", async () => {
-  if (!sourceWorkbook || !workbookHandle || rows.length === 0 || saved) return;
-  try {
-    saveButton.disabled = true;
-    setStatus("Saving changes to the selected workbook…");
-    const sheet = sourceWorkbook.Sheets[sourceWorkbook.SheetNames[0]];
-    appendRowsToSheet(sheet, rows);
-    const writable = await workbookHandle.createWritable();
-    await writable.write(XLSX.write(sourceWorkbook, { bookType: "xlsx", type: "array", compression: true }));
-    await writable.close();
-    saved = true;
-    setStatus("Saved directly to the selected workbook.", "success");
-  } catch (error) {
-    saveButton.disabled = false;
-    setStatus("Could not save. Close the workbook in Excel and try again. " + (error instanceof Error ? error.message : ""), "error");
-  }
-});
-
-resetButton.addEventListener("click", () => { pdfInput.value = ""; rows = []; sourceWorkbook = null; workbookHandle = null; saved = false; workbookName.textContent = "No workbook opened"; reviewSection.classList.add("hidden"); fileChanged(); setStatus("Select a PDF and open the workbook to begin."); });
-pdfInput.addEventListener("change", fileChanged);
+if (!supabase) { message("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to GitHub Actions secrets.", "error"); signIn.disabled = true; signUp.disabled = true; } else {
+  supabase.auth.onAuthStateChange((_event, next) => showSession(next)); supabase.auth.getSession().then(({ data }) => showSession(data.session)); supabase.channel("transfers-live").on("postgres_changes", { event: "*", schema: "public", table: "transfers" }, () => void loadTransfers()).subscribe();
+}
+authForm.addEventListener("submit", async (event) => { event.preventDefault(); if (!supabase) return; signIn.disabled = true; message("Signing in…"); const { error } = await supabase.auth.signInWithPassword({ email: email.value, password: password.value }); signIn.disabled = false; if (error) message(error.message, "error"); });
+signUp.addEventListener("click", async () => { if (!supabase || !email.reportValidity() || !password.reportValidity()) return; signUp.disabled = true; message("Creating account…"); const { error } = await supabase.auth.signUp({ email: email.value, password: password.value, options: { emailRedirectTo: window.location.href } }); signUp.disabled = false; message(error ? error.message : "Account created. Check your email to confirm it before signing in.", error ? "error" : "success"); });
+signOut.addEventListener("click", async () => { if (supabase) await supabase.auth.signOut(); });
+pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
+extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); rows = parse(await pdfText(file), file.name); renderRows(); review.classList.remove("hidden"); message("Extraction complete. Review the records before saving.", "success"); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
+addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
