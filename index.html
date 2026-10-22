@@ -1,18 +1,135 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="Shared DCN FG transfer monitoring dashboard." /><title>DCN FG Monitoring</title></head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Shared DCN FG transfer monitoring dashboard." />
+    <meta name="theme-color" content="#79BEEE" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <title>DCN FG Monitoring</title>
+  </head>
   <body>
-    <main class="app-shell">
-      <header class="site-header"><div><p class="eyebrow">DCN FG MONITORING</p><h1>Transfer dashboard</h1><p class="intro">Import IWTS PDFs, review extracted records, and monitor transfers in one shared live register.</p></div><div id="user-panel" class="hidden user-panel"><span id="user-email"></span><button id="sign-out-button" type="button" class="secondary">Sign out</button></div></header>
-      <p id="status" class="status" role="status"></p>
-      <section id="auth-section" class="card auth-card"><h2>Sign in</h2><p>Use your approved monitoring account to view and manage transfers.</p><form id="auth-form" class="auth-form"><label>Email<input id="email-input" type="email" autocomplete="email" required /></label><label>Password<input id="password-input" type="password" autocomplete="current-password" required minlength="6" /></label><div class="actions start"><button id="sign-in-button" type="submit">Sign in</button><button id="sign-up-button" type="button" class="secondary">Create account</button></div></form></section>
-      <section id="dashboard-section" class="hidden">
-        <div class="stat-grid"><article class="stat-card"><span>Total records</span><strong id="total-records">0</strong></article><article class="stat-card"><span>Total quantity</span><strong id="total-quantity">0</strong></article><article class="stat-card"><span>Unique references</span><strong id="total-references">0</strong></article><article class="stat-card"><span>Destinations</span><strong id="total-destinations">0</strong></article></div>
-        <section class="card upload-card"><h2>Import IWTS PDF</h2><p class="muted">The PDF is processed in your browser. Only the reviewed transfer data is sent to Supabase.</p><div class="upload-grid"><label class="file-picker"><span>IWTS PDF</span><input id="pdf-file" type="file" accept="application/pdf,.pdf" /><small id="pdf-name">No PDF selected</small></label></div><button id="extract-button" type="button" disabled>Extract records</button></section>
-        <section id="review-section" class="card hidden"><div class="section-heading"><div><h2>Review extracted records</h2><p>Correct any value before saving it to the shared register.</p></div><button id="add-row-button" type="button" class="secondary">Add row</button></div><div class="table-wrap"><table id="review-table"><thead></thead><tbody></tbody></table></div><div class="actions"><button id="save-button" type="button">Save records to dashboard</button><button id="reset-button" type="button" class="secondary">Discard import</button></div></section>
-        <section class="card records-card"><div class="section-heading"><div><h2>Transfer records</h2><p id="records-description">Loading records…</p></div><button id="refresh-button" type="button" class="secondary">Refresh</button></div><label class="search-label">Search <input id="search-input" type="search" placeholder="Reference, item, lot, or warehouse" /></label><div class="table-wrap"><table id="records-table"><thead></thead><tbody></tbody></table></div></section>
-      </section>
-    </main>
+    <p id="status" class="status" role="status"></p>
+
+    <!-- Sign in -->
+    <section id="auth-section" class="auth">
+      <div class="auth-brand">
+        <span class="logo" aria-hidden="true"></span>
+        <div>
+          <h1>Transfer dashboard</h1>
+          <p>Import IWTS PDFs, review the records, and follow every transfer in one shared register.</p>
+        </div>
+        <small>DCN FG Monitoring</small>
+      </div>
+      <div class="auth-panel">
+        <div class="auth-card">
+          <h2>Sign in</h2>
+          <p class="muted">Use your approved monitoring account.</p>
+          <form id="auth-form" class="auth-form">
+            <label>Email<input id="email-input" type="email" autocomplete="email" required /></label>
+            <label>Password<input id="password-input" type="password" autocomplete="current-password" required minlength="6" /></label>
+            <div class="actions">
+              <button id="sign-in-button" type="submit">Sign in</button>
+              <button id="sign-up-button" type="button" class="secondary">Create account</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- App -->
+    <div id="dashboard-section" class="shell hidden">
+      <aside class="sidebar">
+        <a class="brand" href="#/overview"><span class="logo" aria-hidden="true"></span>DCN FG</a>
+        <nav class="nav" aria-label="Main">
+          <a href="#/overview" data-nav="overview">Overview</a>
+          <a href="#/import" data-nav="import">Import</a>
+          <a href="#/records" data-nav="records">Records</a>
+        </nav>
+        <div id="user-panel" class="hidden user-panel">
+          <span id="user-email"></span>
+          <button id="sign-out-button" type="button" class="secondary">Sign out</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <!-- Overview -->
+        <section class="page" data-page="overview">
+          <header class="page-head">
+            <h1>Overview</h1>
+            <p>A snapshot of everything in the shared register.</p>
+          </header>
+
+          <div class="panel stats">
+            <div class="stat"><span>Total quantity</span><strong id="total-quantity">0</strong></div>
+            <div class="stat"><span>Total records</span><strong id="total-records">0</strong></div>
+            <div class="stat"><span>Unique references</span><strong id="total-references">0</strong></div>
+            <div class="stat"><span>Destinations</span><strong id="total-destinations">0</strong></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <div><h2>Latest transfers</h2><p class="muted">The six most recent records.</p></div>
+              <a class="link" href="#/records">View all records</a>
+            </div>
+            <div class="table-wrap">
+              <table id="recent-table">
+                <thead><tr><th>Reference</th><th>Date</th><th>From</th><th>To</th><th>Description</th><th class="num">Quantity</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Import -->
+        <section class="page hidden" data-page="import">
+          <header class="page-head">
+            <h1>Import</h1>
+            <p>Upload an IWTS PDF. It is read in your browser, and only the data you review is saved.</p>
+          </header>
+
+          <div class="panel">
+            <label class="file-picker">
+              <input id="pdf-file" type="file" accept="application/pdf,.pdf" />
+              <span class="file-title">Choose an IWTS PDF</span>
+              <small id="pdf-name">No PDF selected</small>
+            </label>
+            <div class="actions"><button id="extract-button" type="button" disabled>Extract records</button></div>
+          </div>
+
+          <div id="review-section" class="panel hidden">
+            <div class="section-heading">
+              <div><h2>Review records</h2><p class="muted">Correct any value before saving it to the register.</p></div>
+              <button id="add-row-button" type="button" class="secondary">Add row</button>
+            </div>
+            <div class="table-wrap"><table id="review-table"><thead></thead><tbody></tbody></table></div>
+            <div class="actions">
+              <button id="save-button" type="button">Save records</button>
+              <button id="reset-button" type="button" class="secondary">Discard import</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Records -->
+        <section class="page hidden" data-page="records">
+          <header class="page-head">
+            <h1>Records</h1>
+            <p id="records-description">Loading records…</p>
+          </header>
+
+          <div class="panel">
+            <div class="toolbar">
+              <label class="search-label"><span class="sr-only">Search</span><input id="search-input" type="search" placeholder="Search reference, item, lot, or warehouse" /></label>
+              <button id="refresh-button" type="button" class="secondary">Refresh</button>
+            </div>
+            <div class="table-wrap"><table id="records-table"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
