@@ -133,7 +133,7 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
 const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
 // One transaction can span several batch codes. Rows that share every other identifying value are shown once;
-// batch code, quantity and pallets are per-batch, so they are stacked one line per batch (same order in all three).
+// batch code and quantity are per-batch, so they are stacked one line per batch (same order); pallets are merged into a single comma-separated line.
 function groupTransfers(list: Transfer[]) {
   const groups = new Map<string, Transfer[]>();
   for (const transfer of list) {
@@ -156,7 +156,7 @@ function renderTransfers() {
     const [first] = members, tr = document.createElement("tr");
     if (members.some(savedRecordIsDuplicate)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; }
     const stack = (pick: (transfer: Transfer) => string) => members.map((transfer) => pick(transfer) || (members.length > 1 ? "—" : "")).join("\n");
-    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), stack((transfer) => transfer.pallets.join(", "))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 7) td.className = "stacked"; tr.append(td); });
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), [...new Set(members.flatMap((transfer) => transfer.pallets))].join(", ")].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 7 || index === 8) td.className = "stacked"; tr.append(td); });
     recordsBody.append(tr);
   });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
