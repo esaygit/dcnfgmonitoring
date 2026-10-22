@@ -197,9 +197,11 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
 .remove-row:hover:not(:disabled) { background: #fdeeeb; }
 
 /* Filters and export */
-.filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 20px; }
+.filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; gap: 20px; }
 .field { display: grid; gap: 8px; font-weight: 600; font-size: 0.9rem; }
 .field input, .field select { width: 100%; }
+.field input[type="date"] { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); color: var(--ink); }
+.field input[type="date"]:focus { outline: none; border-color: var(--sky); background: var(--surface); box-shadow: 0 0 0 4px #79beee33; }
 select {
   border: 1px solid var(--line);
   border-radius: 12px;

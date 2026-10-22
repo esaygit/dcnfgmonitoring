@@ -19,8 +19,8 @@ const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>(
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signUp = $<HTMLButtonElement>("#sign-up-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
-const batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
-const exBatch = $<HTMLInputElement>("#export-batch-filter"), exItem = $<HTMLSelectElement>("#export-item-filter"), exClear = $<HTMLButtonElement>("#export-clear-button"), exportButton = $<HTMLButtonElement>("#export-button"), exRecords = $<HTMLElement>("#export-records"), exQuantity = $<HTMLElement>("#export-quantity"), exReferences = $<HTMLElement>("#export-references"), exBody = $<HTMLTableSectionElement>("#export-preview tbody");
+const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
+const exDateFrom = $<HTMLInputElement>("#export-date-from-filter"), exDateTo = $<HTMLInputElement>("#export-date-to-filter"), exBatch = $<HTMLInputElement>("#export-batch-filter"), exItem = $<HTMLSelectElement>("#export-item-filter"), exClear = $<HTMLButtonElement>("#export-clear-button"), exportButton = $<HTMLButtonElement>("#export-button"), exRecords = $<HTMLElement>("#export-records"), exQuantity = $<HTMLElement>("#export-quantity"), exReferences = $<HTMLElement>("#export-references"), exBody = $<HTMLTableSectionElement>("#export-preview tbody");
 
 const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
   { group: "50 PPM", items: [["4554770121", "RF MR EXP 50PPM"], ["4554770128", "RF MR DG 50PPM"], ["4554770136", "LF X-FINE EXP 50PPM"], ["4554770130", "RF X-FINE DG 50PPM"]] },
@@ -59,13 +59,13 @@ function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
   rows.forEach((row, index) => { const tr = document.createElement("tr"); HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
-type Filters = { query: string; batch: string; item: string };
-function applyFilters({ query, batch, item }: Filters) {
+type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
+function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
-  return transfers.filter((transfer) => (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item));
+  return transfers.filter((transfer) => (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!dateFrom || transfer.document_date >= dateFrom) && (!dateTo || transfer.document_date <= dateTo) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item));
 }
-const filteredTransfers = () => applyFilters({ query: search.value, batch: batchFilter.value, item: itemFilter.value });
-const exportTransfers = () => applyFilters({ query: "", batch: exBatch.value, item: exItem.value });
+const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
+const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
 function renderTransfers() {
   const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
@@ -108,7 +108,7 @@ async function exportToExcel() {
     const fill = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
     const hair = { style: "thin" as const, color: { argb: LINE } };
     const now = new Date(), stamp = now.toISOString().slice(0, 10);
-    const filters = [exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
+    const filters = [exDateFrom.value ? `Date from ${displayDate(exDateFrom.value)}` : "", exDateTo.value ? `Date to ${displayDate(exDateTo.value)}` : "", exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
     const filterText = filters.length ? filters.join("; ") : "none (all records)";
     const total = list.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
     const whole = list.every((transfer) => Number.isInteger(Number(transfer.quantity)));
@@ -172,7 +172,11 @@ async function exportToExcel() {
     const buffer = await workbook.xlsx.writeBuffer();
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    link.download = `dcn-fg-transfers-${stamp}.xlsx`; document.body.append(link); link.click(); link.remove();
+    const timestampParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now).reduce<Record<string, string>>((parts, part) => ({ ...parts, [part.type]: part.value }), {});
+    const generatedAt = `${timestampParts.year}${timestampParts.month}${timestampParts.day}-${timestampParts.hour}${timestampParts.minute}`;
+    const safeBatch = exBatch.value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
+    const filenameParts = ["dcn-fg-transfers", exDateFrom.value ? `from-${exDateFrom.value.replaceAll("-", "")}` : "", exDateTo.value ? `to-${exDateTo.value.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", `generated-${generatedAt}`].filter(Boolean);
+    link.download = `${filenameParts.join("_")}.xlsx`; document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 2000);
     message(`${list.length} record${list.length === 1 ? "" : "s"} exported to Excel.`, "success");
   } catch (error) {
@@ -196,9 +200,9 @@ signOut.addEventListener("click", async () => { if (supabase) await supabase.aut
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
 extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); rows = parse(await pdfText(file), file.name); renderRows(); review.classList.remove("hidden"); message("Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
-for (const filter of [batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
-for (const filter of [exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
-clearFilters.addEventListener("click", () => { batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
-exClear.addEventListener("click", () => { exBatch.value = ""; exItem.value = ""; renderExport(); });
+for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
+for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
+clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
+exClear.addEventListener("click", () => { exDateFrom.value = ""; exDateTo.value = ""; exBatch.value = ""; exItem.value = ""; renderExport(); });
 exportButton.addEventListener("click", () => void exportToExcel());
 window.addEventListener("hashchange", route); route(); renderExport();
