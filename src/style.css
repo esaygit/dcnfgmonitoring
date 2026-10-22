@@ -126,6 +126,16 @@ input[type="email"]:focus, input[type="password"]:focus, input[type="search"]:fo
 .nav a { padding: 11px 14px; border-radius: 12px; color: var(--ink-2); font-weight: 600; text-decoration: none; transition: background 0.15s, color 0.15s; }
 .nav a:hover { background: var(--tint); color: var(--ink); }
 .nav a.active { background: var(--sky); color: var(--ink); font-weight: 700; }
+.sidebar-filters { display: grid; gap: 14px; padding: 20px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sidebar-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.sidebar-section-head h2 { font-size: .9rem; }
+.text-button { padding: 0; background: transparent; color: var(--sky-deep); font-size: .8rem; }
+.text-button:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+.sidebar-filters label { display: grid; gap: 6px; color: var(--ink-2); font-size: .78rem; font-weight: 700; }
+.sidebar-filters input, .sidebar-filters select { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; background: var(--bg); color: var(--ink); font: inherit; font-size: .82rem; }
+.sidebar-filters input:focus, .sidebar-filters select:focus { outline: none; border-color: var(--sky); box-shadow: 0 0 0 3px #79beee33; }
+.export-button { margin: -20px 12px 0; background: var(--ink); color: #fff; }
+.export-button:hover:not(:disabled) { background: #1c455c; }
 .user-panel { margin-top: auto; display: grid; gap: 12px; padding: 0 12px; }
 .user-panel span { color: var(--ink-2); font-size: 0.85rem; overflow-wrap: anywhere; }
 
@@ -203,6 +213,9 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { padding: 0; }
   .nav { grid-auto-flow: column; order: 3; width: 100%; overflow-x: auto; }
+  .sidebar-filters { order: 4; width: 100%; grid-template-columns: repeat(4, minmax(140px, 1fr)); align-items: end; }
+  .sidebar-section-head { grid-column: 1 / -1; }
+  .export-button { order: 5; margin: 0; }
   .user-panel { margin: 0 0 0 auto; grid-auto-flow: column; align-items: center; padding: 0; }
   .user-panel span { display: none; }
   .content { padding: 40px 20px 72px; }
@@ -217,6 +230,10 @@ td.empty { text-align: center; color: var(--ink-2); padding: 48px 16px; }
   .toolbar { flex-direction: column; }
   .search-label { max-width: none; }
   .actions button { flex: 1; }
+}
+
+@media (max-width: 620px) {
+  .sidebar-filters { grid-template-columns: 1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

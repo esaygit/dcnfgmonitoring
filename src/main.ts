@@ -1,5 +1,6 @@
 import { createClient, type Session } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
+import * as XLSX from "xlsx";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./style.css";
 
@@ -18,6 +19,7 @@ const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>(
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signUp = $<HTMLButtonElement>("#sign-up-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
+const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button"), exportButton = $<HTMLButtonElement>("#export-button");
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
 function message(text = "", kind: "" | "error" | "success" = "") { status.textContent = text; status.className = `status ${kind}`; }
@@ -46,8 +48,15 @@ function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
   rows.forEach((row, index) => { const tr = document.createElement("tr"); HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
+function filteredTransfers() {
+  const query = search.value.trim().toLowerCase(), batch = batchFilter.value.trim().toLowerCase();
+  return transfers.filter((transfer) => {
+    const matchesSearch = !query || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(query));
+    return matchesSearch && (!dateFrom.value || transfer.document_date >= dateFrom.value) && (!dateTo.value || transfer.document_date <= dateTo.value) && (!batch || transfer.batch_code?.toLowerCase().includes(batch)) && (!itemFilter.value || transfer.item_code === itemFilter.value);
+  });
+}
 function renderTransfers() {
-  const query = search.value.trim().toLowerCase(); const shown = transfers.filter((transfer) => !query || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(query)));
+  const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
   $<HTMLElement>("#total-records").textContent = String(transfers.length); $<HTMLElement>("#total-quantity").textContent = quantity.toLocaleString(); $<HTMLElement>("#total-references").textContent = String(new Set(transfers.map((transfer) => transfer.transaction_reference)).size); $<HTMLElement>("#total-destinations").textContent = String(new Set(transfers.map((transfer) => transfer.transferred_to)).size);
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; recordsBody.innerHTML = "";
@@ -70,6 +79,28 @@ function route() {
 }
 async function loadTransfers() { if (!supabase || !session) return; recordsDescription.textContent = "Loading records…"; const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000); if (error) { message(`Could not load records: ${error.message}`, "error"); return; } transfers = (data ?? []) as Transfer[]; renderTransfers(); }
 async function deleteTransfer(id: string) { if (!supabase || !confirm("Delete this transfer record?")) return; const { error } = await supabase.from("transfers").delete().eq("id", id); if (error) message(`Could not delete record: ${error.message}`, "error"); else await loadTransfers(); }
+function exportToExcel() {
+  const data = filteredTransfers().map((transfer) => ({
+    "Transaction Reference": transfer.transaction_reference,
+    "Document Date": displayDate(transfer.document_date),
+    "Transferred From": transfer.transferred_from,
+    "Transferred To": transfer.transferred_to,
+    "Item Code": transfer.item_code,
+    Description: transfer.description,
+    "Product Code": transfer.product_code ?? "",
+    "Batch Code": transfer.batch_code ?? "",
+    Quantity: transfer.quantity,
+    Pallets: transfer.pallets.join(", "),
+    "Source File": transfer.source_filename ?? "",
+    "Created At": new Date(transfer.created_at).toLocaleString(),
+  }));
+  if (!data.length) { message("There are no filtered records to export.", "error"); return; }
+  const workbook = XLSX.utils.book_new(), sheet = XLSX.utils.json_to_sheet(data);
+  sheet["!cols"] = [22, 15, 16, 16, 16, 34, 14, 28, 12, 20, 42, 22].map((wch) => ({ wch }));
+  XLSX.utils.book_append_sheet(workbook, sheet, "Transfers");
+  XLSX.writeFile(workbook, `dcn-fg-transfers-${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
+  message(`${data.length} filtered record${data.length === 1 ? "" : "s"} exported to Excel.`, "success");
+}
 async function saveRows() {
   const file = pdf.files?.[0]; if (!supabase || !file || !rows.length) return;
   const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: file.name }));
@@ -87,4 +118,7 @@ signOut.addEventListener("click", async () => { if (supabase) await supabase.aut
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
 extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); rows = parse(await pdfText(file), file.name); renderRows(); review.classList.remove("hidden"); message("Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
+for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
+clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
+exportButton.addEventListener("click", exportToExcel);
 window.addEventListener("hashchange", route); route();
