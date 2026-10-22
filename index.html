@@ -47,29 +47,8 @@
           <a href="#/overview" data-nav="overview">Overview</a>
           <a href="#/import" data-nav="import">Import</a>
           <a href="#/records" data-nav="records">Records</a>
+          <a href="#/export" data-nav="export">Export</a>
         </nav>
-        <section class="sidebar-filters" aria-labelledby="filter-title">
-          <div class="sidebar-section-head"><h2 id="filter-title">Filters</h2><button id="clear-filters-button" type="button" class="text-button">Clear</button></div>
-          <label>Document date from<input id="date-from-filter" type="date" /></label>
-          <label>Document date to<input id="date-to-filter" type="date" /></label>
-          <label>Batch code<input id="batch-filter" type="search" placeholder="Search batch code" /></label>
-          <label>Item<select id="item-filter">
-            <option value="">All items</option>
-            <optgroup label="50 PPM">
-              <option value="4554770121">RF MR EXP 50PPM — 4554770121</option>
-              <option value="4554770128">RF MR DG 50PPM — 4554770128</option>
-              <option value="4554770136">LF X-FINE EXP 50PPM — 4554770136</option>
-              <option value="4554770130">RF X-FINE DG 50PPM — 4554770130</option>
-            </optgroup>
-            <optgroup label="10 PPM">
-              <option value="4554770148">RF MR EXP 10PPM — 4554770148</option>
-              <option value="4554770147">RF MR DG 10PPM — 4554770147</option>
-              <option value="4554770149">RF X-XFINE EXP 10PPM — 4554770149</option>
-              <option value="4554770150">RF X-XFINE DG 10PPM — 4554770150</option>
-            </optgroup>
-          </select></label>
-        </section>
-        <button id="export-button" type="button" class="export-button">Export to Excel</button>
         <div id="user-panel" class="hidden user-panel">
           <span id="user-email"></span>
           <button id="sign-out-button" type="button" class="secondary">Sign out</button>
@@ -146,7 +125,50 @@
               <label class="search-label"><span class="sr-only">Search</span><input id="search-input" type="search" placeholder="Search reference, item, lot, or warehouse" /></label>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
             </div>
+            <div class="filters">
+              <label class="field">Batch code<input id="batch-filter" type="search" placeholder="Search batch code" /></label>
+              <label class="field">Item<select id="item-filter"></select></label>
+              <button id="clear-filters-button" type="button" class="text-button">Clear filters</button>
+            </div>
             <div class="table-wrap"><table id="records-table"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+
+        <!-- Export -->
+        <section class="page hidden" data-page="export">
+          <header class="page-head">
+            <h1>Export</h1>
+            <p>Download the register as a formatted Excel workbook.</p>
+          </header>
+
+          <div class="panel">
+            <div class="section-heading">
+              <div><h2>Choose records</h2><p class="muted">Leave a filter empty to include everything.</p></div>
+            </div>
+            <div class="filters">
+              <label class="field">Batch code<input id="export-batch-filter" type="search" placeholder="Search batch code" /></label>
+              <label class="field">Item<select id="export-item-filter"></select></label>
+              <button id="export-clear-button" type="button" class="text-button">Clear filters</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <div><h2>Your workbook</h2><p class="muted">Includes a Transfers sheet and a Summary sheet grouped by item and destination.</p></div>
+              <button id="export-button" type="button">Download workbook</button>
+            </div>
+            <div class="mini-stats">
+              <div><span>Records</span><strong id="export-records">0</strong></div>
+              <div><span>Total quantity</span><strong id="export-quantity">0</strong></div>
+              <div><span>Unique references</span><strong id="export-references">0</strong></div>
+            </div>
+            <p class="muted preview-label">Preview of the first five records</p>
+            <div class="table-wrap">
+              <table id="export-preview">
+                <thead><tr><th>Reference</th><th>Date</th><th>To</th><th>Description</th><th>Batch</th><th class="num">Quantity</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>

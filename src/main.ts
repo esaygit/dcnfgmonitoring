@@ -1,6 +1,6 @@
 import { createClient, type Session } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
-import * as XLSX from "xlsx";
+import type { Row, Worksheet } from "exceljs";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./style.css";
 
@@ -19,7 +19,18 @@ const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>(
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signUp = $<HTMLButtonElement>("#sign-up-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
-const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button"), exportButton = $<HTMLButtonElement>("#export-button");
+const batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
+const exBatch = $<HTMLInputElement>("#export-batch-filter"), exItem = $<HTMLSelectElement>("#export-item-filter"), exClear = $<HTMLButtonElement>("#export-clear-button"), exportButton = $<HTMLButtonElement>("#export-button"), exRecords = $<HTMLElement>("#export-records"), exQuantity = $<HTMLElement>("#export-quantity"), exReferences = $<HTMLElement>("#export-references"), exBody = $<HTMLTableSectionElement>("#export-preview tbody");
+
+const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
+  { group: "50 PPM", items: [["4554770121", "RF MR EXP 50PPM"], ["4554770128", "RF MR DG 50PPM"], ["4554770136", "LF X-FINE EXP 50PPM"], ["4554770130", "RF X-FINE DG 50PPM"]] },
+  { group: "10 PPM", items: [["4554770148", "RF MR EXP 10PPM"], ["4554770147", "RF MR DG 10PPM"], ["4554770149", "RF X-XFINE EXP 10PPM"], ["4554770150", "RF X-XFINE DG 10PPM"]] },
+];
+function fillItems(select: HTMLSelectElement) {
+  select.innerHTML = ""; select.append(new Option("All items", ""));
+  for (const { group, items } of ITEM_GROUPS) { const optgroup = document.createElement("optgroup"); optgroup.label = group; for (const [code, name] of items) optgroup.append(new Option(`${name} — ${code}`, code)); select.append(optgroup); }
+}
+fillItems(itemFilter); fillItems(exItem);
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
 function message(text = "", kind: "" | "error" | "success" = "") { status.textContent = text; status.className = `status ${kind}`; }
@@ -48,13 +59,13 @@ function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
   rows.forEach((row, index) => { const tr = document.createElement("tr"); HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
-function filteredTransfers() {
-  const query = search.value.trim().toLowerCase(), batch = batchFilter.value.trim().toLowerCase();
-  return transfers.filter((transfer) => {
-    const matchesSearch = !query || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(query));
-    return matchesSearch && (!dateFrom.value || transfer.document_date >= dateFrom.value) && (!dateTo.value || transfer.document_date <= dateTo.value) && (!batch || transfer.batch_code?.toLowerCase().includes(batch)) && (!itemFilter.value || transfer.item_code === itemFilter.value);
-  });
+type Filters = { query: string; batch: string; item: string };
+function applyFilters({ query, batch, item }: Filters) {
+  const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
+  return transfers.filter((transfer) => (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item));
 }
+const filteredTransfers = () => applyFilters({ query: search.value, batch: batchFilter.value, item: itemFilter.value });
+const exportTransfers = () => applyFilters({ query: "", batch: exBatch.value, item: exItem.value });
 function renderTransfers() {
   const shown = filteredTransfers();
   const quantity = transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0);
@@ -62,7 +73,15 @@ function renderTransfers() {
   recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; recordsBody.innerHTML = "";
   shown.forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", String(transfer.quantity), transfer.pallets.join(", ")].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Delete"; remove.addEventListener("click", () => void deleteTransfer(transfer.id)); td.append(remove); tr.append(td); recordsBody.append(tr); });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length + 1, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
-  renderRecent();
+  renderRecent(); renderExport();
+}
+function renderExport() {
+  const list = exportTransfers();
+  exRecords.textContent = String(list.length); exQuantity.textContent = list.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0).toLocaleString(); exReferences.textContent = String(new Set(list.map((transfer) => transfer.transaction_reference)).size);
+  exBody.innerHTML = "";
+  list.slice(0, 5).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_to, transfer.description, transfer.batch_code ?? "", String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); exBody.append(tr); });
+  if (!list.length) emptyRow(exBody, 6, transfers.length ? "No records match these filters." : "No transfers yet. Import an IWTS PDF first.");
+  exportButton.disabled = !list.length;
 }
 function emptyRow(body: HTMLTableSectionElement, columns: number, text: string) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = columns; td.className = "empty"; td.textContent = text; tr.append(td); body.append(tr); }
 function renderRecent() {
@@ -70,7 +89,7 @@ function renderRecent() {
   transfers.slice(0, 6).forEach((transfer) => { const tr = document.createElement("tr"); [transfer.transaction_reference, displayDate(transfer.document_date), transfer.transferred_from, transfer.transferred_to, transfer.description, String(transfer.quantity)].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num"; tr.append(td); }); recentBody.append(tr); });
   if (!transfers.length) emptyRow(recentBody, 6, "Nothing here yet. Import an IWTS PDF to see your latest transfers.");
 }
-const PAGES = ["overview", "import", "records"];
+const PAGES = ["overview", "import", "records", "export"];
 function route() {
   const name = location.hash.replace(/^#\//, ""), current = PAGES.includes(name) ? name : "overview";
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));
@@ -79,27 +98,86 @@ function route() {
 }
 async function loadTransfers() { if (!supabase || !session) return; recordsDescription.textContent = "Loading records…"; const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000); if (error) { message(`Could not load records: ${error.message}`, "error"); return; } transfers = (data ?? []) as Transfer[]; renderTransfers(); }
 async function deleteTransfer(id: string) { if (!supabase || !confirm("Delete this transfer record?")) return; const { error } = await supabase.from("transfers").delete().eq("id", id); if (error) message(`Could not delete record: ${error.message}`, "error"); else await loadTransfers(); }
-function exportToExcel() {
-  const data = filteredTransfers().map((transfer) => ({
-    "Transaction Reference": transfer.transaction_reference,
-    "Document Date": displayDate(transfer.document_date),
-    "Transferred From": transfer.transferred_from,
-    "Transferred To": transfer.transferred_to,
-    "Item Code": transfer.item_code,
-    Description: transfer.description,
-    "Product Code": transfer.product_code ?? "",
-    "Batch Code": transfer.batch_code ?? "",
-    Quantity: transfer.quantity,
-    Pallets: transfer.pallets.join(", "),
-    "Source File": transfer.source_filename ?? "",
-    "Created At": new Date(transfer.created_at).toLocaleString(),
-  }));
-  if (!data.length) { message("There are no filtered records to export.", "error"); return; }
-  const workbook = XLSX.utils.book_new(), sheet = XLSX.utils.json_to_sheet(data);
-  sheet["!cols"] = [22, 15, 16, 16, 16, 34, 14, 28, 12, 20, 42, 22].map((wch) => ({ wch }));
-  XLSX.utils.book_append_sheet(workbook, sheet, "Transfers");
-  XLSX.writeFile(workbook, `dcn-fg-transfers-${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
-  message(`${data.length} filtered record${data.length === 1 ? "" : "s"} exported to Excel.`, "success");
+async function exportToExcel() {
+  const list = exportTransfers();
+  if (!list.length) { message("There are no records to export.", "error"); return; }
+  exportButton.disabled = true; message("Building workbook…");
+  try {
+    const { default: ExcelJS } = await import("exceljs");
+    const INK = "FF0F2A3A", SKY = "FF79BEEE", TINT = "FFEEF7FD", BAND = "FFF7FBFE", LINE = "FFD3E4F0", MUTED = "FF4D6779";
+    const fill = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
+    const hair = { style: "thin" as const, color: { argb: LINE } };
+    const now = new Date(), stamp = now.toISOString().slice(0, 10);
+    const filters = [exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
+    const filterText = filters.length ? filters.join("; ") : "none (all records)";
+    const total = list.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+    const whole = list.every((transfer) => Number.isInteger(Number(transfer.quantity)));
+    const quantityFormat = whole ? "#,##0" : "#,##0.00";
+
+    const title = (ws: Worksheet, text: string, sub: string, last: number) => {
+      ws.mergeCells(1, 1, 1, last); ws.getCell(1, 1).value = text; ws.getCell(1, 1).font = { size: 18, bold: true, color: { argb: INK } }; ws.getCell(1, 1).alignment = { vertical: "middle" }; ws.getRow(1).height = 34;
+      ws.mergeCells(2, 1, 2, last); ws.getCell(2, 1).value = sub; ws.getCell(2, 1).font = { size: 10, color: { argb: MUTED } }; ws.getRow(2).height = 20;
+    };
+    const header = (row: Row, count: number, right: number[] = [], center: number[] = []) => {
+      row.height = 28;
+      for (let col = 1; col <= count; col++) { const cell = row.getCell(col); cell.fill = fill(SKY); cell.font = { bold: true, color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: right.includes(col) ? "right" : center.includes(col) ? "center" : "left", indent: 1 }; cell.border = { bottom: { style: "medium", color: { argb: INK } } }; }
+    };
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "DCN FG Monitoring"; workbook.created = now;
+
+    // Transfers sheet
+    const ws = workbook.addWorksheet("Transfers", { properties: { tabColor: { argb: SKY } }, views: [{ state: "frozen", xSplit: 1, ySplit: 4, showGridLines: false }] });
+    const cols: [string, number][] = [["Transaction Reference", 24], ["Document Date", 16], ["Transferred From", 18], ["Transferred To", 18], ["Item Code", 16], ["Description", 36], ["Product Code", 16], ["Batch Code", 18], ["Quantity", 14], ["Pallets", 20], ["Source File", 42], ["Created At", 20]];
+    ws.columns = cols.map(([, width]) => ({ width }));
+    title(ws, "DCN FG transfer register", `Generated ${displayDate(stamp)}. Filters: ${filterText}. ${list.length} record${list.length === 1 ? "" : "s"}.`, cols.length);
+    const head = ws.getRow(4); head.values = cols.map(([name]) => name); header(head, cols.length, [9], [2]);
+    list.forEach((transfer, index) => {
+      const [y, m, d] = transfer.document_date.split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
+      row.values = [transfer.transaction_reference, new Date(Date.UTC(y, m - 1, d)), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", Number(transfer.quantity), transfer.pallets.join(", "), transfer.source_filename ?? "", new Date(created.getTime() - created.getTimezoneOffset() * 60000)];
+      row.height = 22;
+      for (let col = 1; col <= cols.length; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : col === 2 ? "center" : "left", indent: col === 9 || col === 2 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); }
+      row.getCell(2).numFmt = "dd-mm-yyyy"; row.getCell(9).numFmt = quantityFormat; row.getCell(12).numFmt = "dd-mm-yyyy hh:mm";
+    });
+    const last = 4 + list.length, totalRow = ws.getRow(last + 1);
+    totalRow.height = 26; totalRow.getCell(1).value = "Total"; totalRow.getCell(9).value = { formula: `SUM(I5:I${last})`, result: total };
+    for (let col = 1; col <= cols.length; col++) { const cell = totalRow.getCell(col); cell.fill = fill(TINT); cell.font = { bold: true, color: { argb: INK } }; cell.border = { top: { style: "medium", color: { argb: INK } } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : "left", indent: col === 9 ? 0 : 1 }; }
+    totalRow.getCell(9).numFmt = quantityFormat;
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: last, column: cols.length } };
+    ws.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "4:4" };
+
+    // Summary sheet
+    const sm = workbook.addWorksheet("Summary", { properties: { tabColor: { argb: SKY } }, views: [{ showGridLines: false }] });
+    sm.columns = [{ width: 22 }, { width: 38 }, { width: 12 }, { width: 16 }];
+    title(sm, "Summary", `Based on the ${list.length} exported record${list.length === 1 ? "" : "s"}. Filters: ${filterText}.`, 4);
+    const block = (label: string, names: string[], data: (string | number)[][], start: number) => {
+      sm.getCell(start, 1).value = label; sm.getCell(start, 1).font = { bold: true, size: 12, color: { argb: INK } };
+      const h = sm.getRow(start + 1); h.values = names; header(h, 4, [3, 4]);
+      data.forEach((values, index) => { const row = sm.getRow(start + 2 + index); row.values = values; row.height = 22; for (let col = 1; col <= 4; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col >= 3 ? "right" : "left", indent: col >= 3 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); } row.getCell(3).numFmt = "#,##0"; row.getCell(4).numFmt = quantityFormat; });
+      const first = start + 2, end = start + 1 + data.length, tr = sm.getRow(end + 1);
+      tr.height = 26; tr.getCell(1).value = "Total"; tr.getCell(3).value = { formula: `SUM(C${first}:C${end})`, result: list.length }; tr.getCell(4).value = { formula: `SUM(D${first}:D${end})`, result: total };
+      for (let col = 1; col <= 4; col++) { const cell = tr.getCell(col); cell.fill = fill(TINT); cell.font = { bold: true, color: { argb: INK } }; cell.border = { top: { style: "medium", color: { argb: INK } } }; cell.alignment = { vertical: "middle", horizontal: col >= 3 ? "right" : "left", indent: col >= 3 ? 0 : 1 }; }
+      tr.getCell(3).numFmt = "#,##0"; tr.getCell(4).numFmt = quantityFormat;
+      return end + 4;
+    };
+    const byItem = new Map<string, { description: string; records: number; quantity: number }>(), byDestination = new Map<string, { from: Set<string>; records: number; quantity: number }>();
+    for (const transfer of list) {
+      const item = byItem.get(transfer.item_code) ?? { description: transfer.description, records: 0, quantity: 0 }; item.records++; item.quantity += Number(transfer.quantity || 0); byItem.set(transfer.item_code, item);
+      const destination = byDestination.get(transfer.transferred_to) ?? { from: new Set<string>(), records: 0, quantity: 0 }; destination.from.add(transfer.transferred_from); destination.records++; destination.quantity += Number(transfer.quantity || 0); byDestination.set(transfer.transferred_to, destination);
+    }
+    const next = block("By item", ["Item Code", "Description", "Records", "Quantity"], [...byItem].sort((a, b) => b[1].quantity - a[1].quantity).map(([code, v]) => [code, v.description, v.records, v.quantity]), 4);
+    block("By destination", ["Transferred To", "Transferred From", "Records", "Quantity"], [...byDestination].sort((a, b) => b[1].quantity - a[1].quantity).map(([to, v]) => [to, [...v.from].join(", "), v.records, v.quantity]), next);
+    sm.pageSetup = { orientation: "portrait", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    link.download = `dcn-fg-transfers-${stamp}.xlsx`; document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    message(`${list.length} record${list.length === 1 ? "" : "s"} exported to Excel.`, "success");
+  } catch (error) {
+    message(error instanceof Error ? `Could not build the workbook: ${error.message}` : "Could not build the workbook.", "error");
+  } finally { renderExport(); }
 }
 async function saveRows() {
   const file = pdf.files?.[0]; if (!supabase || !file || !rows.length) return;
@@ -118,7 +196,9 @@ signOut.addEventListener("click", async () => { if (supabase) await supabase.aut
 pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
 extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…"); rows = parse(await pdfText(file), file.name); renderRows(); review.classList.remove("hidden"); message("Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
-for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
-clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
-exportButton.addEventListener("click", exportToExcel);
-window.addEventListener("hashchange", route); route();
+for (const filter of [batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
+for (const filter of [exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
+clearFilters.addEventListener("click", () => { batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
+exClear.addEventListener("click", () => { exBatch.value = ""; exItem.value = ""; renderExport(); });
+exportButton.addEventListener("click", () => void exportToExcel());
+window.addEventListener("hashchange", route); route(); renderExport();
