@@ -99,26 +99,40 @@ function parse(text: string, filename: string): ParsedImport {
   return { rows: itemRows, filenameBatches: filenameBatches.length };
 }
 function normalizedPallets(value: string | string[]) { return (Array.isArray(value) ? value : value.split(",")).map((pallet) => pallet.trim()).filter(Boolean); }
-function sameQuantityAndPallet(left: { quantity: string | number; pallets: string | string[] }, right: { quantity: string | number; pallets: string | string[] }) {
+
+// ---- Possible-duplicate detection ----
+// A possible duplicate needs the SAME batch code, the same quantity and at least one shared pallet.
+// Different batches of one transaction often share pallets and quantities, so they are not duplicates of each other.
+type DuplicateKey = { quantity: string | number; pallets: string | string[]; batch: string | null | undefined; item: string | null | undefined };
+const same = (left: string | null | undefined, right: string | null | undefined) => clean(left ?? "").toLowerCase() === clean(right ?? "").toLowerCase();
+function sameQuantityAndPallet(left: DuplicateKey, right: DuplicateKey) {
+  if (!same(left.batch, right.batch)) return false;
+  if (clean(left.item ?? "") && clean(right.item ?? "") && !same(left.item, right.item)) return false;
   const leftQuantity = String(left.quantity).replace(/,/g, "").trim(), rightQuantity = String(right.quantity).replace(/,/g, "").trim();
   if (!leftQuantity || !rightQuantity || !Number.isFinite(Number(leftQuantity)) || Number(leftQuantity) !== Number(rightQuantity)) return false;
   const rightPallets = new Set(normalizedPallets(right.pallets).map((pallet) => pallet.toLowerCase()));
   return normalizedPallets(left.pallets).some((pallet) => rightPallets.has(pallet.toLowerCase()));
 }
-function hasPossibleDuplicate(row: ImportRow, index?: number) {
-  const savedMatch = transfers.some((transfer) => sameQuantityAndPallet({ quantity: row.Quantity, pallets: row.Pallets }, { quantity: transfer.quantity, pallets: transfer.pallets }));
-  const importMatch = index === undefined ? false : rows.some((other, otherIndex) => otherIndex !== index && sameQuantityAndPallet({ quantity: row.Quantity, pallets: row.Pallets }, { quantity: other.Quantity, pallets: other.Pallets }));
-  return savedMatch || importMatch;
+const rowKey = (row: ImportRow): DuplicateKey => ({ quantity: row.Quantity, pallets: row.Pallets, batch: row["Batch Code"], item: row["Item Code"] });
+const transferKey = (transfer: Transfer): DuplicateKey => ({ quantity: transfer.quantity, pallets: transfer.pallets, batch: transfer.batch_code, item: transfer.item_code });
+function duplicateMatch(row: ImportRow, index?: number) {
+  const saved = transfers.find((transfer) => sameQuantityAndPallet(rowKey(row), transferKey(transfer)));
+  if (saved) return `saved record ${saved.transaction_reference || "(no reference)"}`;
+  if (index === undefined) return "";
+  const other = rows.findIndex((candidate, candidateIndex) => candidateIndex !== index && sameQuantityAndPallet(rowKey(row), rowKey(candidate)));
+  return other >= 0 ? `import row ${other + 1}` : "";
 }
-function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet({ quantity: transfer.quantity, pallets: transfer.pallets }, { quantity: other.quantity, pallets: other.pallets })); }
+function hasPossibleDuplicate(row: ImportRow, index?: number) { return Boolean(duplicateMatch(row, index)); }
+function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet(transferKey(transfer), transferKey(other))); }
+
 function transactionReferences(values: string[]) { return [...new Set(values.map((value) => clean(value) || "not entered"))].join(", "); }
 function renderRows() {
   reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
   const duplicateRows = rows.filter((row, index) => hasPossibleDuplicate(row, index));
   const duplicateCount = duplicateRows.length;
   reviewDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
-  reviewDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted row${duplicateCount === 1 ? "" : "s"} match the quantity and at least one pallet of another row or saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
-  rows.forEach((row, index) => { const tr = document.createElement("tr"); if (hasPossibleDuplicate(row, index)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: a matching quantity and pallet number exists."; } HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; renderRows(); }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
+  reviewDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted row${duplicateCount === 1 ? "" : "s"} match the batch code, quantity and at least one pallet of another row or saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
+  rows.forEach((row, index) => { const tr = document.createElement("tr"); if (hasPossibleDuplicate(row, index)) { tr.className = "possible-duplicate"; tr.title = `Possible duplicate of ${duplicateMatch(row, index)}: same batch code, quantity and pallet number.`; } HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; renderRows(); }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
 function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
@@ -158,13 +172,33 @@ function renderTransfers() {
   const duplicateRows = shown.filter(savedRecordIsDuplicate);
   const duplicateCount = duplicateRows.length;
   recordsDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
-  recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted record${duplicateCount === 1 ? "" : "s"} share the same quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
+  recordsDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted batch line${duplicateCount === 1 ? "" : "s"} share the same batch code, quantity and at least one pallet with another saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.` : "";
   const groups = groupTransfers(shown); recordsDescription.textContent = `${shown.length} of ${transfers.length} records`; recordsHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}</tr>`; recordsBody.innerHTML = "";
   groups.forEach((members) => {
     const [first] = members, tr = document.createElement("tr");
-    if (members.some(savedRecordIsDuplicate)) { tr.className = "possible-duplicate"; tr.title = "Possible duplicate: another record has the same quantity and pallet number."; }
-    const stack = (pick: (transfer: Transfer) => string) => stackLines(members, pick);
-    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", stack((transfer) => transfer.batch_code ?? ""), stack((transfer) => String(transfer.quantity)), palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 7) td.className = "stacked"; tr.append(td); });
+    const duplicateIds = new Set(members.filter(savedRecordIsDuplicate).map((transfer) => transfer.id));
+    if (duplicateIds.size) tr.className = "has-duplicate";
+    const stackCell = (td: HTMLTableCellElement, pick: (transfer: Transfer) => string) => {
+      td.className = "stacked";
+      members.forEach((transfer) => {
+        const line = document.createElement("span");
+        line.className = duplicateIds.has(transfer.id) ? "stack-line dup-line" : "stack-line";
+        if (duplicateIds.has(transfer.id)) line.title = "Possible duplicate: another saved record has the same batch code, quantity and pallet.";
+        line.textContent = pick(transfer) || (members.length > 1 ? "—" : "");
+        td.append(line);
+      });
+    };
+    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])].forEach((value, index) => {
+      const td = document.createElement("td");
+      if (index === 7) stackCell(td, (transfer) => transfer.batch_code ?? "");
+      else if (index === 8) stackCell(td, (transfer) => String(transfer.quantity));
+      else {
+        td.textContent = value;
+        if (index === 9) td.className = "stacked";
+        if (index === 0 && duplicateIds.size) { const badge = document.createElement("span"); badge.className = "dup-badge"; badge.textContent = "Possible duplicate"; badge.title = "A batch in this transaction matches another saved record (same batch code, quantity and pallet)."; td.append(badge); }
+      }
+      tr.append(td);
+    });
     recordsBody.append(tr);
   });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
