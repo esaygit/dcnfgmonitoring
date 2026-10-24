@@ -139,16 +139,20 @@
         <section class="page hidden" data-page="import">
           <header class="page-head">
             <h1>Import</h1>
-            <p>Upload an IWTS PDF.</p>
+            <p>Upload one or more IWTS PDFs.</p>
           </header>
 
           <div class="panel">
-            <label class="file-picker">
-              <input id="pdf-file" type="file" accept="application/pdf,.pdf" />
-              <span class="file-title">Choose an IWTS PDF</span>
-              <small id="pdf-name">No PDF selected</small>
+            <label id="drop-zone" class="file-picker drop-zone">
+              <input id="pdf-file" type="file" accept="application/pdf,.pdf" multiple />
+              <span class="file-title">Drop IWTS PDFs here, or click to choose</span>
+              <small id="pdf-name">No PDFs selected</small>
             </label>
-            <div class="actions"><button id="extract-button" type="button" disabled>Extract records</button></div>
+            <ul id="file-list" class="file-list hidden" aria-label="PDFs waiting to be extracted"></ul>
+            <div class="actions">
+              <button id="extract-button" type="button" disabled>Extract records</button>
+              <button id="clear-files-button" type="button" class="secondary hidden">Clear list</button>
+            </div>
           </div>
 
           <div id="review-section" class="panel hidden">
