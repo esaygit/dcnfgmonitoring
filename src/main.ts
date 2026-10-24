@@ -19,6 +19,7 @@ const $ = <T extends Element>(selector: string) => document.querySelector<T>(sel
 const status = $<HTMLParagraphElement>("#status"), authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email");
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button"), review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody"), addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
+const dropZone = $<HTMLElement>("#drop-zone"), fileList = $<HTMLUListElement>("#file-list"), clearFiles = $<HTMLButtonElement>("#clear-files-button");
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
@@ -36,6 +37,8 @@ function fillItems(select: HTMLSelectElement) {
 fillItems(itemFilter); fillItems(exItem);
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
+const rowSource = new WeakMap<ImportRow, string>(); // which PDF each review row came from
+const reviewSources = new Set<string>(); // PDFs whose rows are currently in review
 let messageTimeout: ReturnType<typeof setTimeout> | undefined;
 function message(text = "", kind: "" | "error" | "success" = "", duration = 5000) {
   if (messageTimeout) clearTimeout(messageTimeout);
@@ -126,14 +129,43 @@ function hasPossibleDuplicate(row: ImportRow, index?: number) { return Boolean(d
 function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet(transferKey(transfer), transferKey(other))); }
 
 function transactionReferences(values: string[]) { return [...new Set(values.map((value) => clean(value) || "not entered"))].join(", "); }
-function renderRows() {
-  reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th></th></tr>`; reviewBody.innerHTML = "";
-  const duplicateRows = rows.filter((row, index) => hasPossibleDuplicate(row, index));
+let reviewRowEls: HTMLTableRowElement[] = [];
+// Light refresh used while typing: updates highlights and the warning without rebuilding the inputs.
+function refreshReviewDuplicates() {
+  const duplicateRows: ImportRow[] = [];
+  rows.forEach((row, index) => {
+    const match = duplicateMatch(row, index), tr = reviewRowEls[index];
+    if (match) duplicateRows.push(row);
+    if (!tr) return;
+    tr.classList.toggle("possible-duplicate", Boolean(match));
+    tr.title = match ? `Possible duplicate of ${match}: same batch code, quantity and pallet number.` : "";
+  });
   const duplicateCount = duplicateRows.length;
   reviewDuplicateWarning.classList.toggle("hidden", duplicateCount === 0);
   reviewDuplicateWarning.textContent = duplicateCount ? `Possible duplicate${duplicateCount === 1 ? "" : "s"} found: ${duplicateCount} highlighted row${duplicateCount === 1 ? "" : "s"} match the batch code, quantity and at least one pallet of another row or saved record. Transaction Reference${duplicateRows.length === 1 ? "" : "s"}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
-  rows.forEach((row, index) => { const tr = document.createElement("tr"); if (hasPossibleDuplicate(row, index)) { tr.className = "possible-duplicate"; tr.title = `Possible duplicate of ${duplicateMatch(row, index)}: same batch code, quantity and pallet number.`; } HEADERS.forEach((header) => { const td = document.createElement("td"), input = document.createElement("input"); input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`); input.addEventListener("input", () => { rows[index][header] = input.value; renderRows(); }); td.append(input); tr.append(td); }); const td = document.createElement("td"), remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove"; remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); }); td.append(remove); tr.append(td); reviewBody.append(tr); });
 }
+// Full render: only when rows are added or removed.
+function renderRows() {
+  reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th>Source file</th><th></th></tr>`; reviewBody.innerHTML = "";
+  reviewRowEls = rows.map((row, index) => {
+    const tr = document.createElement("tr");
+    HEADERS.forEach((header) => {
+      const td = document.createElement("td"), input = document.createElement("input");
+      input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`);
+      input.addEventListener("input", () => { row[header] = input.value; refreshReviewDuplicates(); });
+      td.append(input); tr.append(td);
+    });
+    const source = rowSource.get(row) ?? "Added manually", sourceCell = document.createElement("td");
+    sourceCell.className = "source-cell"; sourceCell.textContent = source; sourceCell.title = source; tr.append(sourceCell);
+    const td = document.createElement("td"), remove = document.createElement("button");
+    remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove";
+    remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); });
+    td.append(remove); tr.append(td); reviewBody.append(tr);
+    return tr;
+  });
+  refreshReviewDuplicates();
+}
+
 type Filters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string };
 function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   const q = query.trim().toLowerCase(), b = batch.trim().toLowerCase();
@@ -429,8 +461,8 @@ async function exportToExcel() {
   } finally { renderExport(); }
 }
 async function saveRows() {
-  const file = pdf.files?.[0]; if (!supabase || !file || !rows.length) return;
-  const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: file.name }));
+  if (!supabase || !rows.length) return;
+  const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: rowSource.get(row) ?? "manual entry" }));
   if (data.some((row) => !row.transaction_reference || !row.document_date || !row.transferred_from || !row.transferred_to || !row.item_code || !row.description || !Number.isFinite(row.quantity))) { message("Complete all required fields and use a valid document date and quantity before saving.", "error"); return; }
   save.disabled = true;
   message("Saving records to the shared dashboard…", "", 0);
@@ -444,7 +476,7 @@ async function saveRows() {
     save.disabled = false;
   }
   if (saveError) { message(`Could not save records: ${saveError}`, "error"); return; }
-  pdf.value = ""; pdfName.textContent = "No PDF selected"; rows = []; review.classList.add("hidden"); message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success"); await loadTransfers(); location.hash = "#/records";
+  rows = []; reviewSources.clear(); review.classList.add("hidden"); renderQueue(); message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success"); await loadTransfers(); location.hash = "#/records";
 }
 function showSession(next: Session | null) { session = next; const signedIn = Boolean(next); authSection.classList.toggle("hidden", signedIn); dashboard.classList.toggle("hidden", !signedIn); userPanel.classList.toggle("hidden", !signedIn); userEmail.textContent = next?.user.email ?? ""; if (signedIn) { void loadTransfers(); route(); } }
 
@@ -482,9 +514,80 @@ signOut.addEventListener("click", async () => {
     signOut.disabled = false;
   }
 });
-pdf.addEventListener("change", () => { pdfName.textContent = pdf.files?.[0]?.name ?? "No PDF selected"; extract.disabled = !pdf.files?.[0]; });
-extract.addEventListener("click", async () => { const file = pdf.files?.[0]; if (!file) return; try { extract.disabled = true; message("Reading IWTS PDF…", "", 0); const parsed = parse(await pdfText(file), file.name); rows = parsed.rows; renderRows(); review.classList.remove("hidden"); message(parsed.filenameBatches > 1 ? `${parsed.filenameBatches} batch entries found in the filename. Review the split records before saving.` : "Extraction complete. Review the records before saving.", "success"); review.scrollIntoView({ block: "start" }); } catch (error) { message(error instanceof Error ? error.message : "Could not process this PDF.", "error"); } finally { extract.disabled = false; } });
-addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
+// ---- Multi-file upload: choose or drag & drop several PDFs, extract them together ----
+type QueueItem = { file: File; state: "queued" | "reading" | "failed"; error?: string };
+let queue: QueueItem[] = [], extracting = false;
+const fileKey = (file: File) => `${file.name}|${file.size}|${file.lastModified}`;
+const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+function renderQueue() {
+  fileList.innerHTML = "";
+  queue.forEach((item) => {
+    const li = document.createElement("li"), name = document.createElement("span"), size = document.createElement("span"), state = document.createElement("span"), remove = document.createElement("button");
+    name.className = "file-name"; name.textContent = item.file.name; name.title = item.file.name;
+    size.className = "file-size"; size.textContent = formatSize(item.file.size);
+    state.className = `file-state ${item.state}`; state.textContent = item.state === "reading" ? "Reading…" : item.state === "failed" ? `Failed: ${item.error ?? "could not read"}` : "Ready"; state.title = item.error ?? "";
+    remove.type = "button"; remove.className = "file-remove secondary"; remove.textContent = "Remove"; remove.setAttribute("aria-label", `Remove ${item.file.name}`); remove.disabled = item.state === "reading";
+    remove.addEventListener("click", () => { queue = queue.filter((entry) => entry !== item); renderQueue(); });
+    li.append(name, size, state, remove); fileList.append(li);
+  });
+  fileList.classList.toggle("hidden", !queue.length); clearFiles.classList.toggle("hidden", !queue.length);
+  clearFiles.disabled = extracting;
+  pdfName.textContent = queue.length ? `${queue.length} PDF${queue.length === 1 ? "" : "s"} ready to extract` : "No PDFs selected";
+  extract.textContent = queue.length > 1 ? `Extract ${queue.length} PDFs` : "Extract records";
+  extract.disabled = extracting || !queue.length;
+}
+function addFiles(files: File[]) {
+  const known = new Set([...queue.map((item) => fileKey(item.file)), ...reviewSources]);
+  let added = 0, ignored = 0, repeated = 0;
+  for (const file of files) {
+    if (!isPdf(file)) { ignored++; continue; }
+    if (known.has(fileKey(file))) { repeated++; continue; }
+    known.add(fileKey(file)); queue.push({ file, state: "queued" }); added++;
+  }
+  renderQueue();
+  const notes = [ignored && `${ignored} non-PDF file${ignored === 1 ? "" : "s"} ignored`, repeated && `${repeated} already added`].filter(Boolean);
+  if (notes.length) message(notes.join(" · "), added ? "" : "error");
+}
+pdf.addEventListener("change", () => { addFiles(Array.from(pdf.files ?? [])); pdf.value = ""; }); // reset so the same file can be picked again
+clearFiles.addEventListener("click", () => { if (extracting) return; queue = []; renderQueue(); });
+let dragDepth = 0;
+const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes("Files");
+dropZone.addEventListener("dragenter", (event) => { if (!hasFiles(event)) return; event.preventDefault(); dragDepth++; dropZone.classList.add("dragging"); });
+dropZone.addEventListener("dragover", (event) => { if (!hasFiles(event)) return; event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; });
+dropZone.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropZone.classList.remove("dragging"); });
+dropZone.addEventListener("drop", (event) => { if (!hasFiles(event)) return; event.preventDefault(); dragDepth = 0; dropZone.classList.remove("dragging"); addFiles(Array.from(event.dataTransfer?.files ?? [])); });
+// A file dropped outside the zone would make the browser open the PDF and leave the app.
+for (const type of ["dragover", "drop"]) window.addEventListener(type, (event) => { if (hasFiles(event as DragEvent)) event.preventDefault(); });
+extract.addEventListener("click", async () => {
+  if (extracting) return;
+  const batch = queue.filter((item) => item.state !== "reading");
+  if (!batch.length) return;
+  extracting = true; let added = 0, done = 0, failed = 0, split = 0, lastError = "";
+  for (const [position, item] of batch.entries()) {
+    item.state = "reading"; item.error = undefined; renderQueue();
+    message(`Reading PDF ${position + 1} of ${batch.length}: ${item.file.name}…`, "", 0);
+    try {
+      const parsed = parse(await pdfText(item.file), item.file.name);
+      parsed.rows.forEach((row) => rowSource.set(row, item.file.name));
+      rows.push(...parsed.rows); reviewSources.add(fileKey(item.file));
+      added += parsed.rows.length; done++; if (parsed.filenameBatches > 1) split++;
+      queue = queue.filter((entry) => entry !== item);
+    } catch (error) {
+      item.state = "failed"; item.error = lastError = error instanceof Error ? error.message : "Could not process this PDF."; failed++;
+    }
+    renderQueue();
+  }
+  extracting = false; renderQueue();
+  if (added) { renderRows(); review.classList.remove("hidden"); }
+  if (!added) { message(failed === 1 ? lastError : `None of the ${failed} PDFs could be processed.`, "error"); return; }
+  const parts = [`${added} record${added === 1 ? "" : "s"} added from ${done} PDF${done === 1 ? "" : "s"}.`];
+  if (split) parts.push(`${split} file${split === 1 ? "" : "s"} had several batch entries in the filename; check the split records.`);
+  if (failed) parts.push(`${failed} PDF${failed === 1 ? "" : "s"} failed and ${failed === 1 ? "is" : "are"} still listed above.`);
+  parts.push("Review the records before saving.");
+  message(parts.join(" "), failed ? "error" : "success"); review.scrollIntoView({ block: "start" });
+});
+addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; reviewSources.clear(); review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
 for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
 for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
 clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
@@ -501,3 +604,4 @@ window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 route();
 renderExport();
+renderQueue();
