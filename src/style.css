@@ -377,3 +377,23 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---- Multi-file upload (append to the end of style.css) ---- */
+.drop-zone { transition: background 0.15s, border-color 0.15s; }
+.drop-zone.dragging { background: var(--tint-2); border-color: var(--sky-deep); border-style: solid; }
+.file-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 8px; }
+.file-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, auto) auto; align-items: center; gap: 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.file-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { color: var(--ink-2); font-size: 0.82rem; white-space: nowrap; }
+.file-state { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 0.82rem; font-weight: 700; }
+.file-state.reading { color: var(--sky-deep); }
+.file-state.failed { color: var(--danger); }
+.file-remove { padding: 6px 12px; font-size: 0.85rem; }
+.source-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 0.85rem; }
+
+@media (max-width: 560px) {
+  .file-list li { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .file-size { display: none; }
+  .file-state { max-width: none; grid-column: 1; grid-row: 2; }
+  .file-remove { grid-column: 2; grid-row: 1 / span 2; }
+}
