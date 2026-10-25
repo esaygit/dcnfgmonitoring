@@ -186,6 +186,7 @@
               <label class="field">Document date to <span class="field-hint">Inclusive · choose from calendar</span><input id="date-to-filter" type="date" lang="en-GB" /></label>
               <label class="field">Batch code<input id="batch-filter" type="search" placeholder="Search batch code" /></label>
               <label class="field">Item<select id="item-filter"></select></label>
+              <label class="field">Sort by<select id="sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
               <button id="clear-filters-button" type="button" class="text-button">Clear filters</button>
             </div>
             <p id="records-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>
@@ -209,6 +210,7 @@
               <label class="field">Document date to <span class="field-hint">Inclusive · choose from calendar</span><input id="export-date-to-filter" type="date" lang="en-GB" /></label>
               <label class="field">Batch code<input id="export-batch-filter" type="search" placeholder="Search batch code" /></label>
               <label class="field">Item<select id="export-item-filter"></select></label>
+              <label class="field">Sort by<select id="export-sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
               <button id="export-clear-button" type="button" class="text-button">Clear filters</button>
             </div>
           </div>
