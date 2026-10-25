@@ -32,9 +32,52 @@ const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
 ];
 function fillItems(select: HTMLSelectElement) {
   select.innerHTML = ""; select.append(new Option("All items", ""));
-  for (const { group, items } of ITEM_GROUPS) { const optgroup = document.createElement("optgroup"); optgroup.label = group; for (const [code, name] of items) optgroup.append(new Option(`${name} — ${code}`, code)); select.append(optgroup); }
+  for (const { group, items } of ITEM_GROUPS) { const optgroup = document.createElement("optgroup"); optgroup.label = group; optgroup.append(new Option(`All ${group} items`, `group:${group}`)); for (const [code, name] of items) optgroup.append(new Option(`${name} — ${code}`, code)); select.append(optgroup); }
+}
+const groupValue = (group: string) => `group:${group}`;
+const sortFilter = $<HTMLSelectElement>("#sort-filter"), exSort = $<HTMLSelectElement>("#export-sort-filter");
+// Native <optgroup> labels can't be clicked, so the Item filter gets a custom dropdown in which the
+// "10 PPM" / "50 PPM" headers are selectable rows. The (hidden) <select> stays the source of truth.
+function enhanceItemSelect(select: HTMLSelectElement) {
+  const wrap = document.createElement("div"), button = document.createElement("button"), menu = document.createElement("div");
+  const label = document.createElement("span"), caret = document.createElement("span"), choices: HTMLButtonElement[] = [];
+  wrap.className = "item-picker"; button.type = "button"; button.className = "item-picker-button"; button.setAttribute("aria-haspopup", "listbox"); button.setAttribute("aria-expanded", "false");
+  label.className = "item-picker-label"; caret.className = "item-picker-caret"; caret.setAttribute("aria-hidden", "true"); button.append(label, caret);
+  menu.className = "item-picker-menu hidden"; menu.setAttribute("role", "listbox");
+  const isOpen = () => !menu.classList.contains("hidden");
+  const close = () => { menu.classList.add("hidden"); button.setAttribute("aria-expanded", "false"); };
+  const open = () => { menu.classList.remove("hidden"); button.setAttribute("aria-expanded", "true"); (choices.find((choice) => choice.getAttribute("aria-selected") === "true") ?? choices[0]).focus(); };
+  const sync = () => { label.textContent = select.selectedOptions[0]?.textContent ?? "All items"; choices.forEach((choice) => choice.setAttribute("aria-selected", String(choice.dataset.value === select.value))); };
+  const addChoice = (value: string, text: string, className: string, hint?: string) => {
+    const choice = document.createElement("button"), name = document.createElement("span");
+    choice.type = "button"; choice.className = `item-choice ${className}`; choice.dataset.value = value; choice.setAttribute("role", "option");
+    name.textContent = text; choice.append(name);
+    if (hint) { const small = document.createElement("small"); small.textContent = hint; choice.append(small); }
+    choice.addEventListener("click", () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); close(); button.focus(); });
+    choices.push(choice); menu.append(choice);
+  };
+  addChoice("", "All items", "item-choice-all");
+  for (const { group, items } of ITEM_GROUPS) {
+    addChoice(groupValue(group), group, "item-choice-group", `All ${items.length} items`);
+    for (const [code, name] of items) addChoice(code, name, "item-choice-item", code);
+  }
+  button.addEventListener("click", () => (isOpen() ? close() : open()));
+  wrap.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isOpen()) { event.preventDefault(); close(); button.focus(); return; }
+    if (event.key === "Tab") { close(); return; }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (!isOpen()) { open(); return; }
+    const current = choices.indexOf(document.activeElement as HTMLButtonElement);
+    choices[event.key === "ArrowDown" ? Math.min(choices.length - 1, current + 1) : Math.max(0, current - 1)].focus();
+  });
+  document.addEventListener("click", (event) => { if (!wrap.contains(event.target as Node)) close(); });
+  select.addEventListener("change", sync);
+  wrap.append(button, menu); select.hidden = true; select.after(wrap); sync();
+  return sync;
 }
 fillItems(itemFilter); fillItems(exItem);
+const syncItemFilter = enhanceItemSelect(itemFilter), syncExItem = enhanceItemSelect(exItem);
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
 const rowSource = new WeakMap<ImportRow, string>(); // which PDF each review row came from
@@ -173,11 +216,22 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   return transfers.filter((transfer) => {
     const transferDate = normalizedDate(transfer.document_date, true);
     const withinDateRange = (!from && !to) || (Boolean(transferDate) && (!from || transferDate >= from) && (!to || transferDate <= to));
-    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && withinDateRange && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || transfer.item_code === item);
+    return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && withinDateRange && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || (item.startsWith("group:") ? GROUP_OF.get(transfer.item_code) === item.slice(6) : transfer.item_code === item));
   });
 }
-const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
-const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
+// Sorting works on whole transactions (a transaction can span several batch lines): by date (newest/oldest first) or by total quantity.
+function sortGroups(groups: Transfer[][], sort: string) {
+  const dateOf = (group: Transfer[]) => normalizedDate(group[0].document_date, true);
+  const quantityOf = (group: Transfer[]) => group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const direction = sort.endsWith("asc") ? 1 : -1;
+  const compare = sort.startsWith("qty")
+    ? (left: Transfer[], right: Transfer[]) => direction * (quantityOf(left) - quantityOf(right)) || dateOf(right).localeCompare(dateOf(left))
+    : (left: Transfer[], right: Transfer[]) => direction * (dateOf(left).localeCompare(dateOf(right)) || left[0].created_at.localeCompare(right[0].created_at));
+  return [...groups].sort(compare);
+}
+const sortedFiltered = (filters: Filters, sort: string) => sortGroups(groupTransfers(applyFilters(filters)), sort).flat();
+const filteredTransfers = () => sortedFiltered({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value }, sortFilter.value);
+const exportTransfers = () => sortedFiltered({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value }, exSort.value);
 // Pallets are merged across the batches and wrapped to PALLETS_PER_LINE per line (fixed-width column).
 const PALLETS_PER_LINE = 3;
 function palletLines(pallets: string[]) {
@@ -588,10 +642,10 @@ extract.addEventListener("click", async () => {
   message(parts.join(" "), failed ? "error" : "success"); review.scrollIntoView({ block: "start" });
 });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; reviewSources.clear(); review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
-for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
-for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
-clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
-exClear.addEventListener("click", () => { exDateFrom.value = ""; exDateTo.value = ""; exBatch.value = ""; exItem.value = ""; renderExport(); });
+for (const filter of [dateFrom, dateTo, batchFilter, itemFilter, sortFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
+for (const filter of [exDateFrom, exDateTo, exBatch, exItem, exSort]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
+clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; sortFilter.value = "date-desc"; syncItemFilter(); search.value = ""; renderTransfers(); });
+exClear.addEventListener("click", () => { exDateFrom.value = ""; exDateTo.value = ""; exBatch.value = ""; exItem.value = ""; exSort.value = "date-desc"; syncExItem(); renderExport(); });
 exportButton.addEventListener("click", () => void exportToExcel());
 document.addEventListener("click", (event) => {
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#/"]') : null;
