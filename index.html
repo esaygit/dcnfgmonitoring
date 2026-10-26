@@ -47,7 +47,6 @@
           <a href="#/analytics" data-nav="analytics">Analytics</a>
           <a href="#/import" data-nav="import">Import</a>
           <a href="#/records" data-nav="records">Records</a>
-          <a href="#/export" data-nav="export">Export</a>
         </nav>
         <div id="user-panel" class="hidden user-panel">
           <span id="user-email"></span>
@@ -180,6 +179,7 @@
             <div class="toolbar">
               <label class="search-label"><span class="sr-only">Search</span><input id="search-input" type="search" placeholder="Search reference, item, lot, or warehouse" /></label>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
+              <button id="export-button" type="button" disabled>Download workbook</button>
             </div>
             <div class="filters">
               <label class="field">Document date from<input id="date-from-filter" type="date" lang="en-GB" /></label>
@@ -191,47 +191,6 @@
             </div>
             <p id="records-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>
             <div class="table-wrap"><table id="records-table"><thead></thead><tbody></tbody></table></div>
-          </div>
-        </section>
-
-        <!-- Export -->
-        <section class="page hidden" data-page="export">
-          <header class="page-head">
-            <h1>Export</h1>
-            <p>Download the register as a formatted Excel workbook.</p>
-          </header>
-
-          <div class="panel">
-            <div class="section-heading">
-              <div><h2>Choose records</h2><p class="muted">Leave a filter empty to include everything.</p></div>
-            </div>
-            <div class="filters">
-              <label class="field">Document date from <span class="field-hint">Inclusive · choose from calendar</span><input id="export-date-from-filter" type="date" lang="en-GB" /></label>
-              <label class="field">Document date to <span class="field-hint">Inclusive · choose from calendar</span><input id="export-date-to-filter" type="date" lang="en-GB" /></label>
-              <label class="field">Batch code<input id="export-batch-filter" type="search" placeholder="Search batch code" /></label>
-              <label class="field">Item<select id="export-item-filter"></select></label>
-              <label class="field">Sort by<select id="export-sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
-              <button id="export-clear-button" type="button" class="text-button">Clear filters</button>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-heading">
-              <div><h2>Your workbook</h2><p class="muted">Includes a Transfers sheet and a Summary sheet grouped by item and destination.</p></div>
-              <button id="export-button" type="button">Download workbook</button>
-            </div>
-            <div class="mini-stats">
-              <div><span>Records</span><strong id="export-records">0</strong></div>
-              <div><span>Total quantity</span><strong id="export-quantity">0</strong></div>
-              <div><span>Unique references</span><strong id="export-references">0</strong></div>
-            </div>
-            <p class="muted preview-label">Preview of the first five transactions</p>
-            <div class="table-wrap">
-              <table id="export-preview">
-                <thead><tr><th>Reference</th><th>Date</th><th>To</th><th>Description</th><th>Batch</th><th class="num">Quantity</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
           </div>
         </section>
       </main>
