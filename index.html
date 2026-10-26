@@ -185,7 +185,7 @@
               <label class="field">Document date from<input id="date-from-filter" type="date" lang="en-GB" /></label>
               <label class="field">Document date to<input id="date-to-filter" type="date" lang="en-GB" /></label>
               <label class="field">Batch code<input id="batch-filter" type="search" placeholder="Search batch code" /></label>
-              <label class="field">Item<select id="item-filter"></select></label>
+              <div class="field"><span id="item-picker-label">Item</span><div id="item-picker" class="item-picker"></div><select id="item-filter" class="hidden" tabindex="-1" aria-hidden="true"></select></div>
               <label class="field">Sort by<select id="sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
               <button id="clear-filters-button" type="button" class="text-button">Clear filters</button>
             </div>
