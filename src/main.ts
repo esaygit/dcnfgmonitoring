@@ -24,7 +24,7 @@ const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputEle
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
 const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
-const exportButton = $<HTMLButtonElement>("#export-button");
+const exportButton = $<HTMLButtonElement>("#export-button"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note");
 
 const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
   { group: "50 PPM", items: [["4554770121", "RF MR EXP 50PPM"], ["4554770128", "RF MR DG 50PPM"], ["4554770136", "LF X-FINE EXP 50PPM"], ["4554770130", "RF X-FINE DG 50PPM"]] },
@@ -233,6 +233,9 @@ function renderTransfers() {
     recordsBody.append(tr);
   });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
+  const shownQuantity = shown.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0), isFiltered = Boolean(search.value.trim() || dateFrom.value || dateTo.value || batchFilter.value.trim() || itemFilter.value);
+  recordsTotalQuantity.textContent = shownQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  recordsQuantityNote.textContent = isFiltered ? `${shown.length} of ${transfers.length} records match the current search and filters` : `All ${transfers.length} record${transfers.length === 1 ? "" : "s"}`;
   exportButton.disabled = !shown.length;
   exportButton.title = shown.length ? `Download the ${shown.length} record${shown.length === 1 ? "" : "s"} matching the current search and filters as an Excel workbook` : "No records to download";
   renderRecent(); renderAnalytics();
