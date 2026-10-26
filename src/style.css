@@ -414,3 +414,9 @@ select:focus { outline: none; border-color: var(--sky); background: var(--surfac
   .file-state { max-width: none; grid-column: 1; grid-row: 2; }
   .file-remove { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+/* Records: total of the filtered quantity */
+.records-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 28px 0 24px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--tint); }
+.records-summary span { color: var(--ink-2); font-size: 0.9rem; font-weight: 600; }
+.records-summary strong { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.records-summary small { color: var(--ink-2); font-size: 0.85rem; }
