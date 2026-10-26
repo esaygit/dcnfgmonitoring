@@ -24,7 +24,7 @@ const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputEle
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
 const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
-const exDateFrom = $<HTMLInputElement>("#export-date-from-filter"), exDateTo = $<HTMLInputElement>("#export-date-to-filter"), exBatch = $<HTMLInputElement>("#export-batch-filter"), exItem = $<HTMLSelectElement>("#export-item-filter"), exClear = $<HTMLButtonElement>("#export-clear-button"), exportButton = $<HTMLButtonElement>("#export-button"), exRecords = $<HTMLElement>("#export-records"), exQuantity = $<HTMLElement>("#export-quantity"), exReferences = $<HTMLElement>("#export-references"), exBody = $<HTMLTableSectionElement>("#export-preview tbody");
+const exportButton = $<HTMLButtonElement>("#export-button");
 
 const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
   { group: "50 PPM", items: [["4554770121", "RF MR EXP 50PPM"], ["4554770128", "RF MR DG 50PPM"], ["4554770136", "LF X-FINE EXP 50PPM"], ["4554770130", "RF X-FINE DG 50PPM"]] },
@@ -34,7 +34,7 @@ function fillItems(select: HTMLSelectElement, showCode = true) {
   select.innerHTML = ""; select.append(new Option("All items", ""));
   for (const { group, items } of ITEM_GROUPS) { const optgroup = document.createElement("optgroup"); optgroup.label = group; for (const [code, name] of items) optgroup.append(new Option(showCode ? `${name} — ${code}` : name, code)); select.append(optgroup); }
 }
-fillItems(itemFilter); fillItems(exItem, false); // Export's item filter lists names only
+fillItems(itemFilter);
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
 const rowSource = new WeakMap<ImportRow, string>(); // which PDF each review row came from
@@ -177,7 +177,6 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
   });
 }
 const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
-const exportTransfers = () => applyFilters({ query: "", dateFrom: exDateFrom.value, dateTo: exDateTo.value, batch: exBatch.value, item: exItem.value });
 // Pallets are merged across the batches and wrapped to PALLETS_PER_LINE per line (fixed-width column).
 const PALLETS_PER_LINE = 3;
 function palletLines(pallets: string[]) {
@@ -234,7 +233,9 @@ function renderTransfers() {
     recordsBody.append(tr);
   });
   if (!shown.length) emptyRow(recordsBody, HEADERS.length, transfers.length ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.");
-  renderRecent(); renderExport(); renderAnalytics();
+  exportButton.disabled = !shown.length;
+  exportButton.title = shown.length ? `Download the ${shown.length} record${shown.length === 1 ? "" : "s"} matching the current search and filters as an Excel workbook` : "No records to download";
+  renderRecent(); renderAnalytics();
 }
 const DONUT_COLORS = ["#1f6fa5", "#79beee", "#3fb6a8", "#f2b84b"];
 const GROUP_CLASS: Record<string, string> = { "10 PPM": "ppm-10", "50 PPM": "ppm-50" };
@@ -344,18 +345,6 @@ function renderAnalytics() {
     analyticsBody.append(tr);
   }
 }
-function renderExport() {
-  const list = exportTransfers();
-  exRecords.textContent = String(list.length); exQuantity.textContent = list.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0).toLocaleString(); exReferences.textContent = String(new Set(list.map((transfer) => transfer.transaction_reference)).size);
-  exBody.innerHTML = "";
-  groupTransfers(list).slice(0, 5).forEach((members) => {
-    const [first] = members, tr = document.createElement("tr");
-    [first.transaction_reference, displayDate(first.document_date, true), first.transferred_to, first.description, stackLines(members, (transfer) => transfer.batch_code ?? ""), stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index >= 4) td.className = index === 5 ? "num stacked" : "stacked"; tr.append(td); });
-    exBody.append(tr);
-  });
-  if (!list.length) emptyRow(exBody, 6, transfers.length ? "No records match these filters." : "No transfers yet. Import an IWTS PDF first.");
-  exportButton.disabled = !list.length;
-}
 function emptyRow(body: HTMLTableSectionElement, columns: number, text: string) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = columns; td.className = "empty"; td.textContent = text; tr.append(td); body.append(tr); }
 function renderRecent() {
   recentBody.innerHTML = "";
@@ -366,16 +355,16 @@ function renderRecent() {
   });
   if (!transfers.length) emptyRow(recentBody, 6, "Nothing here yet. Import an IWTS PDF to see your latest transfers.");
 }
-const PAGES = ["overview", "analytics", "import", "records", "export"];
+const PAGES = ["overview", "analytics", "import", "records"];
 function route() {
-  const name = location.hash.replace(/^#\//, ""), current = PAGES.includes(name) ? name : "overview";
+  const hash = location.hash.replace(/^#\//, ""), name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));
   document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((link) => { const on = link.dataset.nav === current; link.classList.toggle("active", on); if (on) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
 }
 async function loadTransfers() { if (!supabase || !session) return; recordsDescription.textContent = "Loading records…"; const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000); if (error) { message(`Could not load records: ${error.message}`, "error"); return; } transfers = (data ?? []) as Transfer[]; renderTransfers(); }
 async function exportToExcel() {
-  const list = exportTransfers();
+  const list = filteredTransfers(); // exactly what the Records tab is showing (search + filters)
   if (!list.length) { message("There are no records to export.", "error"); return; }
   exportButton.disabled = true; message("Building workbook…", "", 0);
   try {
@@ -384,8 +373,9 @@ async function exportToExcel() {
     const fill = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
     const hair = { style: "thin" as const, color: { argb: LINE } };
     const now = new Date(), stamp = now.toISOString().slice(0, 10);
-    const exportFrom = normalizedDate(exDateFrom.value), exportTo = normalizedDate(exDateTo.value);
-    const filters = [exportFrom ? `Date from ${displayDate(exportFrom)}` : "", exportTo ? `Date to ${displayDate(exportTo)}` : "", exItem.value ? `Item ${exItem.selectedOptions[0]?.textContent ?? exItem.value}` : "", exBatch.value.trim() ? `Batch code contains "${exBatch.value.trim()}"` : ""].filter(Boolean);
+    const exportFrom = normalizedDate(dateFrom.value), exportTo = normalizedDate(dateTo.value);
+    const itemName = ITEM_GROUPS.flatMap((entry) => entry.items).find(([code]) => code === itemFilter.value)?.[1] ?? itemFilter.value;
+    const filters = [search.value.trim() ? `Search contains "${search.value.trim()}"` : "", exportFrom ? `Date from ${displayDate(exportFrom)}` : "", exportTo ? `Date to ${displayDate(exportTo)}` : "", itemFilter.value ? `Item ${itemName}` : "", batchFilter.value.trim() ? `Batch code contains "${batchFilter.value.trim()}"` : ""].filter(Boolean);
     const filterText = filters.length ? filters.join("; ") : "none (all records)";
     const total = list.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
     const whole = list.every((transfer) => Number.isInteger(Number(transfer.quantity)));
@@ -451,14 +441,14 @@ async function exportToExcel() {
     link.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const timestampParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now).reduce<Record<string, string>>((parts, part) => ({ ...parts, [part.type]: part.value }), {});
     const generatedAt = `${timestampParts.year}${timestampParts.month}${timestampParts.day}-${timestampParts.hour}${timestampParts.minute}`;
-    const safeBatch = exBatch.value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
+    const safeBatch = batchFilter.value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
     const filenameParts = ["dcn-fg-transfers", exportFrom ? `from-${exportFrom.replaceAll("-", "")}` : "", exportTo ? `to-${exportTo.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", `generated-${generatedAt}`].filter(Boolean);
     link.download = `${filenameParts.join("_")}.xlsx`; document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 2000);
     message(`${list.length} record${list.length === 1 ? "" : "s"} exported to Excel.`, "success");
   } catch (error) {
     message(error instanceof Error ? `Could not build the workbook: ${error.message}` : "Could not build the workbook.", "error");
-  } finally { renderExport(); }
+  } finally { exportButton.disabled = !filteredTransfers().length; }
 }
 async function saveRows() {
   if (!supabase || !rows.length) return;
@@ -589,9 +579,7 @@ extract.addEventListener("click", async () => {
 });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; reviewSources.clear(); review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
 for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
-for (const filter of [exDateFrom, exDateTo, exBatch, exItem]) { filter.addEventListener("input", renderExport); filter.addEventListener("change", renderExport); }
 clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
-exClear.addEventListener("click", () => { exDateFrom.value = ""; exDateTo.value = ""; exBatch.value = ""; exItem.value = ""; renderExport(); });
 exportButton.addEventListener("click", () => void exportToExcel());
 document.addEventListener("click", (event) => {
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#/"]') : null;
@@ -603,5 +591,4 @@ document.addEventListener("click", (event) => {
 window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 route();
-renderExport();
 renderQueue();
