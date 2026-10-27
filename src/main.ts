@@ -12,7 +12,7 @@ const supabase = url && key ? createClient(url, key) : null;
 const HEADERS = ["Transaction Reference", "Document Date", "Transferred From", "Transferred To", "Item Code", "Description", "Product Code", "Batch Code", "Quantity", "Pallets"] as const;
 type Header = (typeof HEADERS)[number];
 type ImportRow = Record<Header, string>;
-type Transfer = { id: string; transaction_reference: string; document_date: string; transferred_from: string; transferred_to: string; item_code: string; description: string; product_code: string | null; batch_code: string | null; quantity: number; pallets: string[]; source_filename: string | null; created_at: string };
+type Transfer = { id: string; transaction_reference: string; document_date: string; document_time: string | null; transferred_from: string; transferred_to: string; item_code: string; description: string; product_code: string | null; batch_code: string | null; quantity: number; pallets: string[]; source_filename: string | null; created_at: string };
 type ParsedImport = { rows: ImportRow[]; filenameBatches: number };
 
 const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!;
@@ -23,7 +23,7 @@ const dropZone = $<HTMLElement>("#drop-zone"), fileList = $<HTMLUListElement>("#
 const refresh = $<HTMLButtonElement>("#refresh-button"), search = $<HTMLInputElement>("#search-input"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody"), recordsDescription = $<HTMLElement>("#records-description"), recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
-const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
+const dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), sortFilter = $<HTMLSelectElement>("#sort-filter"), clearFilters = $<HTMLButtonElement>("#clear-filters-button");
 const exportButton = $<HTMLButtonElement>("#export-button"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note");
 
 const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
@@ -84,6 +84,7 @@ const syncItemPicker = buildItemPicker();
 
 let rows: ImportRow[] = [], transfers: Transfer[] = [], session: Session | null = null;
 const rowSource = new WeakMap<ImportRow, string>(); // which PDF each review row came from
+const rowTime = new WeakMap<ImportRow, string>(); // time (HH:MM:SS) printed inside that PDF
 const reviewSources = new Set<string>(); // PDFs whose rows are currently in review
 let messageTimeout: ReturnType<typeof setTimeout> | undefined;
 function message(text = "", kind: "" | "error" | "success" = "", duration = 5000) {
@@ -102,6 +103,7 @@ function message(text = "", kind: "" | "error" | "success" = "", duration = 5000
 }
 function clean(value: string | undefined) { return (value ?? "").replace(/\s+/g, " ").trim(); }
 function matched(text: string, pattern: RegExp) { return clean(text.match(pattern)?.[1]); }
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 function normalizedDate(value: string, monthFirst = true) {
   const date = value.trim();
   const iso = date.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T)/);
@@ -119,6 +121,32 @@ function normalizedDate(value: string, monthFirst = true) {
 }
 function isoDate(value: string) { return normalizedDate(value); }
 function displayDate(value: string, monthFirst = true) { const [year, month, day] = normalizedDate(value, monthFirst).split("-"); return year ? `${month}-${day}-${year}` : ""; }
+
+// ---- Time printed inside the PDF (used to order imported records) ----
+function normalizedTime(value: string) {
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i);
+  if (!m) return "";
+  let hour = Number(m[1]);
+  if (m[4]) { const pm = m[4].toUpperCase() === "PM"; hour = (hour % 12) + (pm ? 12 : 0); }
+  if (hour > 23 || Number(m[2]) > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${m[2]}:${m[3] ?? "00"}`;
+}
+const TIME = String.raw`(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)`;
+// Tries "DOCUMENT TIME: 14:32", a time right after the document date, then any "TIME: 14:32".
+// If your IWTS PDFs label the time differently, add the label here.
+function pdfTime(text: string) {
+  return normalizedTime(
+    matched(text, new RegExp(String.raw`DOCUMENT\s+TIME\s*:\s*${TIME}`, "i")) ||
+    matched(text, new RegExp(String.raw`DOCUMENT\s+DATE\s*:\s*\S+\s+${TIME}`, "i")) ||
+    matched(text, new RegExp(String.raw`\bTIME\s*:\s*${TIME}`, "i"))
+  );
+}
+const reviewKey = (row: ImportRow) => {
+  const date = normalizedDate(row["Document Date"]);
+  return date ? `${date}T${rowTime.get(row) ?? "00:00:00"}` : "\uffff"; // undated / manual rows go last
+};
+// Array.sort is stable, so rows from the same PDF stay together in their original order.
+function sortReviewRows() { rows.sort((a, b) => compare(reviewKey(a), reviewKey(b))); }
 
 async function pdfText(file: File) {
   const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -171,7 +199,6 @@ function duplicateMatch(row: ImportRow, index?: number) {
   const other = rows.findIndex((candidate, candidateIndex) => candidateIndex !== index && sameQuantityAndPallet(rowKey(row), rowKey(candidate)));
   return other >= 0 ? `import row ${other + 1}` : "";
 }
-function hasPossibleDuplicate(row: ImportRow, index?: number) { return Boolean(duplicateMatch(row, index)); }
 function savedRecordIsDuplicate(transfer: Transfer) { return transfers.some((other) => other.id !== transfer.id && sameQuantityAndPallet(transferKey(transfer), transferKey(other))); }
 
 function transactionReferences(values: string[]) { return [...new Set(values.map((value) => clean(value) || "not entered"))].join(", "); }
@@ -201,7 +228,7 @@ function renderRows() {
       input.addEventListener("input", () => { row[header] = input.value; refreshReviewDuplicates(); });
       td.append(input); tr.append(td);
     });
-    const source = rowSource.get(row) ?? "Added manually", sourceCell = document.createElement("td");
+    const time = rowTime.get(row), source = `${rowSource.get(row) ?? "Added manually"}${time ? ` · ${time.slice(0, 5)}` : ""}`, sourceCell = document.createElement("td");
     sourceCell.className = "source-cell"; sourceCell.textContent = source; sourceCell.title = source; tr.append(sourceCell);
     const td = document.createElement("td"), remove = document.createElement("button");
     remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove";
@@ -223,7 +250,22 @@ function applyFilters({ query, dateFrom, dateTo, batch, item }: Filters) {
     return (!q || [transfer.transaction_reference, transfer.item_code, transfer.description, transfer.batch_code, transfer.transferred_from, transfer.transferred_to].some((value) => value?.toLowerCase().includes(q))) && withinDateRange && (!b || Boolean(transfer.batch_code?.toLowerCase().includes(b))) && (!item || (groupCodes ? groupCodes.has(transfer.item_code) : transfer.item_code === item));
   });
 }
-const filteredTransfers = () => applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value });
+
+// One transaction can span several batch codes; these fields identify it.
+const groupKey = (transfer: Transfer) => [transfer.transaction_reference, transfer.document_date, transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? ""].join("\u0001");
+// Sort modes: date-desc | date-asc | qty-desc | qty-asc. Date uses the document date plus the time read from the PDF.
+// Quantity sorts by the transaction's total, so the batches of one transaction always stay together.
+function sortTransfers(list: Transfer[], mode: string) {
+  const when = (transfer: Transfer) => `${normalizedDate(transfer.document_date, true)}T${transfer.document_time ?? "00:00:00"}`;
+  const totals = new Map<string, number>();
+  for (const transfer of list) totals.set(groupKey(transfer), (totals.get(groupKey(transfer)) ?? 0) + Number(transfer.quantity || 0));
+  const direction = mode.endsWith("asc") ? 1 : -1, byQuantity = mode.startsWith("qty");
+  return [...list].sort((a, b) => {
+    const primary = byQuantity ? totals.get(groupKey(a))! - totals.get(groupKey(b))! : compare(when(a), when(b));
+    return primary * direction || compare(groupKey(a), groupKey(b)) || compare(a.created_at, b.created_at);
+  });
+}
+const filteredTransfers = () => sortTransfers(applyFilters({ query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value }), sortFilter.value);
 // Pallets are merged across the batches and wrapped to PALLETS_PER_LINE per line (fixed-width column).
 const PALLETS_PER_LINE = 3;
 function palletLines(pallets: string[]) {
@@ -231,12 +273,12 @@ function palletLines(pallets: string[]) {
   for (let i = 0; i < pallets.length; i += PALLETS_PER_LINE) lines.push(pallets.slice(i, i + PALLETS_PER_LINE).join(", "));
   return lines.map((line, index) => (index < lines.length - 1 ? `${line},` : line)).join("\n");
 }
-// One transaction can span several batch codes. Rows that share every other identifying value are shown once;
+// Rows that share every other identifying value are shown once;
 // batch code and quantity are per-batch, so they are stacked one line per batch (same order); pallets are merged and wrapped 3 per line.
 function groupTransfers(list: Transfer[]) {
   const groups = new Map<string, Transfer[]>();
   for (const transfer of list) {
-    const key = [transfer.transaction_reference, transfer.document_date, transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? ""].join("\u0001");
+    const key = groupKey(transfer);
     const group = groups.get(key);
     if (group) group.push(transfer); else groups.set(key, [transfer]);
   }
@@ -399,7 +441,8 @@ function renderAnalytics() {
 function emptyRow(body: HTMLTableSectionElement, columns: number, text: string) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = columns; td.className = "empty"; td.textContent = text; tr.append(td); body.append(tr); }
 function renderRecent() {
   recentBody.innerHTML = "";
-  groupTransfers(transfers).slice(0, 6).forEach((members) => {
+  // "Latest" always means newest first, regardless of the Records sort setting.
+  groupTransfers(sortTransfers(transfers, "date-desc")).slice(0, 6).forEach((members) => {
     const [first] = members, tr = document.createElement("tr");
     [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.description, stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => { const td = document.createElement("td"); td.textContent = value; if (index === 5) td.className = "num stacked"; tr.append(td); });
     recentBody.append(tr);
@@ -413,9 +456,19 @@ function route() {
   document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((link) => { const on = link.dataset.nav === current; link.classList.toggle("active", on); if (on) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
 }
-async function loadTransfers() { if (!supabase || !session) return; recordsDescription.textContent = "Loading records…"; const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000); if (error) { message(`Could not load records: ${error.message}`, "error"); return; } transfers = (data ?? []) as Transfer[]; renderTransfers(); }
+async function loadTransfers() {
+  if (!supabase || !session) return;
+  recordsDescription.textContent = "Loading records…";
+  const { data, error } = await supabase.from("transfers").select("*").order("document_date", { ascending: false }).order("document_time", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(1000);
+  if (error) { message(`Could not load records: ${error.message}`, "error"); return; }
+  transfers = (data ?? []) as Transfer[];
+  renderTransfers();
+}
+// Several rows inserted at once fire several realtime events; reload only once.
+let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleReload() { if (reloadTimer) clearTimeout(reloadTimer); reloadTimer = setTimeout(() => void loadTransfers(), 500); }
 async function exportToExcel() {
-  const list = filteredTransfers(); // exactly what the Records tab is showing (search + filters)
+  const list = filteredTransfers(); // exactly what the Records tab is showing (search + filters + sort)
   if (!list.length) { message("There are no records to export.", "error"); return; }
   exportButton.disabled = true; message("Building workbook…", "", 0);
   try {
@@ -503,7 +556,7 @@ async function exportToExcel() {
 }
 async function saveRows() {
   if (!supabase || !rows.length) return;
-  const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: rowSource.get(row) ?? "manual entry" }));
+  const data = rows.map((row) => ({ transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), document_time: rowTime.get(row) ?? null, transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description), product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: Number(row.Quantity.replace(/,/g, "")), pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: rowSource.get(row) ?? "manual entry" }));
   if (data.some((row) => !row.transaction_reference || !row.document_date || !row.transferred_from || !row.transferred_to || !row.item_code || !row.description || !Number.isFinite(row.quantity))) { message("Complete all required fields and use a valid document date and quantity before saving.", "error"); return; }
   save.disabled = true;
   message("Saving records to the shared dashboard…", "", 0);
@@ -522,7 +575,7 @@ async function saveRows() {
 function showSession(next: Session | null) { session = next; const signedIn = Boolean(next); authSection.classList.toggle("hidden", signedIn); dashboard.classList.toggle("hidden", !signedIn); userPanel.classList.toggle("hidden", !signedIn); userEmail.textContent = next?.user.email ?? ""; if (signedIn) { void loadTransfers(); route(); } }
 
 if (!supabase) { message("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to GitHub Actions secrets.", "error"); signIn.disabled = true; } else {
-  supabase.auth.onAuthStateChange((_event, next) => showSession(next)); supabase.auth.getSession().then(({ data }) => showSession(data.session)); supabase.channel("transfers-live").on("postgres_changes", { event: "*", schema: "public", table: "transfers" }, () => void loadTransfers()).subscribe();
+  supabase.auth.onAuthStateChange((_event, next) => showSession(next)); supabase.auth.getSession().then(({ data }) => showSession(data.session)); supabase.channel("transfers-live").on("postgres_changes", { event: "*", schema: "public", table: "transfers" }, scheduleReload).subscribe();
 }
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -609,8 +662,9 @@ extract.addEventListener("click", async () => {
     item.state = "reading"; item.error = undefined; renderQueue();
     message(`Reading PDF ${position + 1} of ${batch.length}: ${item.file.name}…`, "", 0);
     try {
-      const parsed = parse(await pdfText(item.file), item.file.name);
-      parsed.rows.forEach((row) => rowSource.set(row, item.file.name));
+      const text = await pdfText(item.file);
+      const parsed = parse(text, item.file.name), time = pdfTime(text);
+      parsed.rows.forEach((row) => { rowSource.set(row, item.file.name); if (time) rowTime.set(row, time); });
       rows.push(...parsed.rows); reviewSources.add(fileKey(item.file));
       added += parsed.rows.length; done++; if (parsed.filenameBatches > 1) split++;
       queue = queue.filter((entry) => entry !== item);
@@ -620,7 +674,7 @@ extract.addEventListener("click", async () => {
     renderQueue();
   }
   extracting = false; renderQueue();
-  if (added) { renderRows(); review.classList.remove("hidden"); }
+  if (added) { sortReviewRows(); renderRows(); review.classList.remove("hidden"); } // oldest first, by the time printed in each PDF
   if (!added) { message(failed === 1 ? lastError : `None of the ${failed} PDFs could be processed.`, "error"); return; }
   const parts = [`${added} record${added === 1 ? "" : "s"} added from ${done} PDF${done === 1 ? "" : "s"}.`];
   if (split) parts.push(`${split} file${split === 1 ? "" : "s"} had several batch entries in the filename; check the split records.`);
@@ -629,8 +683,8 @@ extract.addEventListener("click", async () => {
   message(parts.join(" "), failed ? "error" : "success"); review.scrollIntoView({ block: "start" });
 });
 addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); }); save.addEventListener("click", () => void saveRows()); reset.addEventListener("click", () => { rows = []; reviewSources.clear(); review.classList.add("hidden"); message("Import discarded."); }); refresh.addEventListener("click", () => void loadTransfers()); search.addEventListener("input", renderTransfers);
-for (const filter of [dateFrom, dateTo, batchFilter, itemFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
-clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; search.value = ""; renderTransfers(); });
+for (const filter of [dateFrom, dateTo, batchFilter, itemFilter, sortFilter]) { filter.addEventListener("input", renderTransfers); filter.addEventListener("change", renderTransfers); }
+clearFilters.addEventListener("click", () => { dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; sortFilter.value = "date-desc"; search.value = ""; renderTransfers(); });
 exportButton.addEventListener("click", () => void exportToExcel());
 document.addEventListener("click", (event) => {
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#/"]') : null;
