@@ -55,7 +55,7 @@ export async function fetchStats(from: string | null, to: string | null): Promis
   if (error) throw new Error(error.message);
   const stats = data as {
     records?: number; quantity?: number; references?: number; destinations?: number;
-    items?: { item_code: string; description: string; records: number; quantity: number; batches: number; pallets: number; destinations: number; latest_date: string | null }[];
+    items?: { item_code: string; description: string; transactions: number; quantity: number; batches: number; pallets: number; destinations: number; latest_date: string | null }[];
   } | null;
   return {
     records: Number(stats?.records ?? 0),
@@ -63,7 +63,7 @@ export async function fetchStats(from: string | null, to: string | null): Promis
     references: Number(stats?.references ?? 0),
     destinations: Number(stats?.destinations ?? 0),
     items: (stats?.items ?? []).map((item) => ({
-      itemCode: item.item_code, description: item.description ?? "", records: Number(item.records), quantity: Number(item.quantity),
+      itemCode: item.item_code, description: item.description ?? "", transactions: Number(item.transactions), quantity: Number(item.quantity),
       batches: Number(item.batches), pallets: Number(item.pallets), destinations: Number(item.destinations), latestDate: item.latest_date ?? "",
     })),
   };
