@@ -1,5 +1,10 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? "/dcnfgmonitoring/" : "/",
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+  },
 });

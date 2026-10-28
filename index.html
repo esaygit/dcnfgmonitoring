@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Shared DCN FG transfer monitoring dashboard." />
     <meta name="theme-color" content="#79BEEE" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Apply the saved (or system) theme before first paint to avoid a light flash in dark mode.
+      (function () {
+        try {
+          var theme = localStorage.getItem("dcn.theme");
+          if (theme !== "light" && theme !== "dark") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -48,9 +59,12 @@
           <a href="#/import" data-nav="import">Import</a>
           <a href="#/records" data-nav="records">Records</a>
         </nav>
-        <div id="user-panel" class="hidden user-panel">
-          <span id="user-email"></span>
-          <button id="sign-out-button" type="button" class="secondary">Sign out</button>
+        <div class="sidebar-footer">
+          <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-pressed="false">Dark mode</button>
+          <div id="user-panel" class="hidden user-panel">
+            <span id="user-email"></span>
+            <button id="sign-out-button" type="button" class="secondary">Sign out</button>
+          </div>
         </div>
       </aside>
 
@@ -90,8 +104,20 @@
             <p>Saved transfer volume and activity by PPM group and item code.</p>
           </header>
 
+          <div class="panel analytics-filters">
+            <label class="field">From<input id="analytics-from" type="date" lang="en-GB" /></label>
+            <label class="field">To<input id="analytics-to" type="date" lang="en-GB" /></label>
+            <div class="chips" role="group" aria-label="Quick date ranges">
+              <button type="button" class="secondary chip" data-range="7">Last 7 days</button>
+              <button type="button" class="secondary chip" data-range="30">Last 30 days</button>
+              <button type="button" class="secondary chip" data-range="month">This month</button>
+              <button type="button" class="secondary chip" data-range="all">All time</button>
+            </div>
+            <p id="analytics-range-note" class="muted analytics-range-note" aria-live="polite">Showing all saved records.</p>
+          </div>
+
           <div class="kpi-grid">
-            <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small>All saved records</small></div>
+            <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small id="analytics-total-note">All saved records</small></div>
             <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-ppm10-quantity">0</strong><small id="analytics-ppm10-share">0% of total</small></div>
             <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-ppm50-quantity">0</strong><small id="analytics-ppm50-share">0% of total</small></div>
             <div class="kpi"><span>Item codes</span><strong id="analytics-item-count">0</strong><small>With saved records</small></div>
@@ -115,7 +141,7 @@
 
           <div class="panel">
             <div class="section-heading">
-              <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity across the saved register.</p></div>
+              <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity for the selected period.</p></div>
               <div class="chart-key" aria-hidden="true"><span><i class="group-dot ppm-10"></i>10 PPM</span><span><i class="group-dot ppm-50"></i>50 PPM</span></div>
             </div>
             <div id="analytics-chart" class="analytics-chart"></div>
@@ -156,7 +182,7 @@
 
           <div id="review-section" class="panel hidden">
             <div class="section-heading">
-              <div><h2>Review records</h2><p class="muted">Correct any value before saving it to the register.</p></div>
+              <div><h2>Review records</h2><p class="muted">Correct any value before saving it to the register. Rows are ordered by the time printed in each PDF.</p></div>
               <button id="add-row-button" type="button" class="secondary">Add row</button>
             </div>
             <p id="review-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>
@@ -177,8 +203,9 @@
 
           <div class="panel">
             <div class="toolbar">
-              <label class="search-label"><span class="sr-only">Search</span><input id="search-input" type="search" placeholder="Search reference, item, lot, or warehouse" /></label>
+              <label class="search-label"><span class="sr-only">Search</span><input id="search-input" type="search" placeholder="Search reference, item, batch, or warehouse" /></label>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
+              <div id="columns-picker" class="columns-picker"></div>
               <button id="export-button" type="button" disabled>Download workbook</button>
             </div>
             <div class="filters">
@@ -191,11 +218,31 @@
             </div>
             <div class="records-summary" aria-live="polite"><span>Total quantity</span><strong id="records-total-quantity">0</strong><small id="records-quantity-note"></small></div>
             <p id="records-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>
-            <div class="table-wrap"><table id="records-table"><thead></thead><tbody></tbody></table></div>
+            <div class="table-wrap records-scroll"><table id="records-table"><thead></thead><tbody></tbody></table></div>
+            <div id="records-pagination" class="pagination hidden">
+              <span id="page-info" class="muted" aria-live="polite"></span>
+              <div class="pagination-controls">
+                <label class="page-size">Per page
+                  <select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select>
+                </label>
+                <button id="page-prev" type="button" class="secondary">Previous</button>
+                <button id="page-next" type="button" class="secondary">Next</button>
+              </div>
+            </div>
           </div>
         </section>
       </main>
     </div>
+
+    <!-- Transaction details -->
+    <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+    <aside id="drawer" class="drawer hidden" role="dialog" aria-labelledby="drawer-title" aria-hidden="true">
+      <div class="drawer-head">
+        <div><p class="muted drawer-kicker">Transaction</p><h2 id="drawer-title"></h2></div>
+        <button id="drawer-close" type="button" class="secondary">Close</button>
+      </div>
+      <div id="drawer-body"></div>
+    </aside>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
