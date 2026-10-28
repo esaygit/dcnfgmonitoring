@@ -26,9 +26,13 @@ function renderDonut(container: HTMLElement, group: string, quantities: Map<stri
   container.innerHTML = `<div class="donut-figure"><svg viewBox="0 0 200 200" class="donut-svg" role="img" aria-label="${group} quantity by item code, total ${fmt(total)}"><circle cx="100" cy="100" r="${radius}" fill="none" stroke="var(--tint)" stroke-width="26"/>${arcs}</svg><div class="donut-center"><strong>${fmt(total)}</strong><span>${total ? "Total quantity" : "No data yet"}</span></div></div><ul class="donut-legend">${legend}</ul>`;
 }
 
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 function render(stats: DashboardStats) {
   const items = [...stats.items].sort((left, right) => right.quantity - left.quantity || left.itemCode.localeCompare(right.itemCode));
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const itemsQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalQuantity = stats.quantity; // every saved row, so this always matches the Overview total
+  const noCodeQuantity = round2(Math.max(0, totalQuantity - itemsQuantity)); // rows saved without an item code
   const largest = items[0];
   $<HTMLElement>("#analytics-item-count").textContent = String(items.length);
   $<HTMLElement>("#analytics-total-quantity").textContent = totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -41,6 +45,16 @@ function render(stats: DashboardStats) {
   $<HTMLElement>("#analytics-ppm50-quantity").textContent = fmt(ppm50);
   $<HTMLElement>("#analytics-ppm10-share").textContent = `${pct(ppm10, totalQuantity)} of total`;
   $<HTMLElement>("#analytics-ppm50-share").textContent = `${pct(ppm50, totalQuantity)} of total`;
+
+  // Explain any difference between the total and the two PPM groups.
+  const other = items.filter((item) => !GROUP_OF.has(item.itemCode));
+  const otherQuantity = round2(other.reduce((sum, item) => sum + item.quantity, 0));
+  const reconcile = $<HTMLElement>("#analytics-reconcile");
+  const unexplained = otherQuantity > 0 || noCodeQuantity > 0;
+  reconcile.classList.toggle("hidden", !unexplained);
+  reconcile.textContent = unexplained
+    ? `Total ${fmt(totalQuantity)} = 10 PPM ${fmt(ppm10)} + 50 PPM ${fmt(ppm50)}${otherQuantity > 0 ? ` + item codes outside those lists ${fmt(otherQuantity)} (${other.map((item) => `${item.itemCode}: ${fmt(item.quantity)}`).join(", ")})` : ""}${noCodeQuantity > 0 ? ` + records with no item code ${fmt(noCodeQuantity)}` : ""}.`
+    : "";
   renderDonut($<HTMLElement>("#analytics-donut-10"), "10 PPM", quantities);
   renderDonut($<HTMLElement>("#analytics-donut-50"), "50 PPM", quantities);
 
@@ -72,7 +86,7 @@ function render(stats: DashboardStats) {
     analyticsChart.append(chartRow);
 
     const tr = document.createElement("tr");
-    [item.itemCode, item.description || "—", String(item.records), item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 }), (item.quantity / item.records).toLocaleString(undefined, { maximumFractionDigits: 2 }), String(item.batches), String(item.pallets), String(item.destinations), item.latestDate ? displayDate(item.latestDate) : "—"].forEach((text, index) => {
+    [item.itemCode, item.description || "—", String(item.transactions), item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 }), item.transactions ? (item.quantity / item.transactions).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—", String(item.batches), String(item.pallets), String(item.destinations), item.latestDate ? displayDate(item.latestDate) : "—"].forEach((text, index) => {
       const td = document.createElement("td");
       td.textContent = text;
       if (index >= 2 && index <= 7) td.className = "num";
