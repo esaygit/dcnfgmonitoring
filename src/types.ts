@@ -28,7 +28,7 @@ export type RecordFilters = { query: string; dateFrom: string; dateTo: string; b
 /** One page of the Records table. Pages are made of whole transactions (all batches of a transaction stay together). */
 export type RecordsPage = { rows: Transfer[]; totalGroups: number; totalRecords: number; totalQuantity: number };
 
-export type ItemStat = { itemCode: string; description: string; records: number; quantity: number; batches: number; pallets: number; destinations: number; latestDate: string };
+export type ItemStat = { itemCode: string; description: string; transactions: number; quantity: number; batches: number; pallets: number; destinations: number; latestDate: string };
 export type DashboardStats = { records: number; quantity: number; references: number; destinations: number; items: ItemStat[] };
 
 /** What the duplicate check sends to the database for one review row. */
