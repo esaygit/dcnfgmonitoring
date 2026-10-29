@@ -18,10 +18,12 @@ export async function loadOverview() {
     $<HTMLElement>("#total-destinations").textContent = stats.destinations.toLocaleString();
 
     recentBody.innerHTML = "";
+    const labels = ["Reference", "Date", "From", "To", "Description", "Quantity"];
     for (const members of groupTransfers(recent.rows)) {
       const [first] = members, tr = document.createElement("tr");
       [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.description, stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => {
         const td = document.createElement("td");
+        td.dataset.label = labels[index];
         td.textContent = value;
         if (index === 5) td.className = "num stacked";
         tr.append(td);

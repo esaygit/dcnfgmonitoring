@@ -51,41 +51,49 @@
 
     <!-- App -->
     <div id="dashboard-section" class="shell hidden">
-      <aside class="sidebar">
+      <header class="app-topbar">
         <a class="brand" href="#/overview"><span class="logo" aria-hidden="true"></span>DCN FG</a>
+        <div class="topbar-main">
+          <span class="shell-context">Shared transfer register</span>
+          <div class="sidebar-footer">
+            <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-pressed="false">Dark mode</button>
+            <div id="user-panel" class="hidden user-panel">
+              <span id="user-email"></span>
+              <button id="sign-out-button" type="button" class="secondary">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <aside class="sidebar">
         <nav class="nav" aria-label="Main">
           <a href="#/overview" data-nav="overview">Overview</a>
           <a href="#/analytics" data-nav="analytics">Analytics</a>
           <a href="#/import" data-nav="import">Import</a>
           <a href="#/records" data-nav="records">Records</a>
         </nav>
-        <div class="sidebar-footer">
-          <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-pressed="false">Dark mode</button>
-          <div id="user-panel" class="hidden user-panel">
-            <span id="user-email"></span>
-            <button id="sign-out-button" type="button" class="secondary">Sign out</button>
-          </div>
-        </div>
       </aside>
 
       <main class="content">
         <!-- Overview -->
         <section class="page" data-page="overview">
-          <header class="page-head">
-            <h1>Overview</h1>
-            <p>A snapshot of everything in the shared register.</p>
+          <header class="page-head overview-head">
+            <div>
+              <h1>Transfer activity</h1>
+              <p>Shared totals, latest activity.</p>
+            </div>
+            <a class="overview-action" href="#/import">Import a PDF</a>
           </header>
 
-          <div class="panel stats">
+          <div class="panel stats" role="group" aria-label="Shared register totals">
             <div class="stat"><span>Total quantity</span><strong id="total-quantity">0</strong></div>
             <div class="stat"><span>Total records</span><strong id="total-records">0</strong></div>
             <div class="stat"><span>Unique references</span><strong id="total-references">0</strong></div>
             <div class="stat"><span>Destinations</span><strong id="total-destinations">0</strong></div>
           </div>
 
-          <div class="panel">
+          <div class="panel overview-activity">
             <div class="section-heading">
-              <div><h2>Latest transfers</h2><p class="muted">The six most recent transactions.</p></div>
+              <div><h2>Latest transfers</h2><p class="muted">Batch lines grouped by transaction.</p></div>
               <a class="link" href="#/records">View all records</a>
             </div>
             <div class="table-wrap">

@@ -1,9 +1,23 @@
 /* Loaded after style.css. Adds: sticky table header and summary, clickable rows, column picker,
    pagination, detail drawer, analytics range filters, mobile card layout and dark mode. */
 
+/* ---------- Transfer-ledger shell ---------- */
+.shell { grid-template-columns: 224px minmax(0, 1fr); grid-template-rows: 64px minmax(0, 1fr); background: var(--tint); }
+.app-topbar { position: sticky; top: 0; z-index: 15; grid-column: 1 / -1; display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: center; min-width: 0; padding: 0 24px; background: var(--tint); border-bottom: 1px solid var(--line); }
+.app-topbar .brand { padding: 0; }
+.topbar-main { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-width: 0; }
+.shell-context { color: var(--ink-2); font-size: 0.9rem; font-weight: 600; }
+.sidebar-footer { display: flex; align-items: center; gap: 12px; }
+.sidebar-footer .user-panel { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; }
+.sidebar-footer .user-panel button, .sidebar-footer > button { min-height: 44px; }
+.sidebar { grid-column: 1; grid-row: 2; top: 64px; height: calc(100vh - 64px); padding: 24px 16px; background: var(--tint); border-right: 0; }
+.nav a { min-height: 40px; padding: 8px 12px; border-radius: 8px; }
+.nav a.active { background: var(--tint-2); color: var(--sky-deep); }
+.content { grid-column: 2; grid-row: 2; min-width: 0; max-width: none; width: auto; margin: 8px; padding: 40px clamp(24px, 4vw, 56px) 72px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+
 /* ---------- Sidebar footer (theme toggle + user) ---------- */
-.sidebar-footer { margin-top: auto; display: grid; gap: 12px; padding: 0 12px; }
-.sidebar-footer .user-panel { margin-top: 0; padding: 0; }
+.sidebar-footer { margin-left: auto; display: flex; align-items: center; gap: 12px; padding: 0; }
+.sidebar-footer .user-panel { margin: 0; padding: 0; }
 
 /* ---------- Records: sticky header and summary, clickable rows ---------- */
 .records-summary { position: sticky; top: 0; z-index: 6; }
@@ -79,6 +93,100 @@ body.drawer-open { overflow: hidden; }
   #records-table td.col-hidden { display: none !important; }
   #records-table tbody tr.has-duplicate { border-color: #f1d28b; }
   #records-table tbody tr.has-duplicate td:first-child { box-shadow: none; }
+}
+
+/* ---------- Overview scan path and phone navigation ---------- */
+.overview-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.overview-head p { max-width: 48ch; }
+.overview-action { display: inline-flex; flex: none; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 8px; background: var(--sky); color: var(--ink); font-weight: 700; text-decoration: none; transition: background 0.15s, transform 0.15s; }
+.overview-action:hover { background: var(--sky-hover); }
+.overview-action:active { transform: translateY(1px); }
+.overview-action:focus-visible { outline: 2px solid var(--sky-deep); outline-offset: 3px; }
+.overview-activity .section-heading { align-items: flex-start; margin-bottom: 20px; }
+.overview-activity .section-heading .link { min-height: 44px; display: inline-flex; align-items: center; }
+.stats .stat:first-child { background: var(--tint); }
+.stats .stat strong { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr); }
+  .app-topbar { grid-template-columns: auto minmax(0, 1fr); padding: 0 16px; }
+  .topbar-main { justify-content: flex-end; }
+  .shell-context { display: none; }
+  .sidebar-footer { gap: 8px; }
+  .sidebar-footer .user-panel span { display: none; }
+  .sidebar-footer .user-panel { gap: 8px; }
+  .sidebar { position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 20; display: block; width: auto; height: auto; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); }
+  .nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: auto; overflow: visible; }
+  .nav a { display: grid; min-height: 48px; place-items: center; padding: 6px 4px; border-radius: 8px; font-size: 0.8rem; line-height: 1.2; text-align: center; white-space: nowrap; }
+  .content { grid-column: 1; grid-row: 2; margin: 0; padding: 32px 24px calc(88px + env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+  .overview-head { flex-wrap: wrap; }
+  .overview-head > div { min-width: 0; }
+  .stats { padding: 0; }
+  .overview-activity .section-heading { flex-direction: row; justify-content: space-between; gap: 12px; }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) {
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: 56px 48px minmax(0, 1fr); }
+  .app-topbar { grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; }
+  .sidebar { position: static; grid-column: 1; grid-row: 2; display: block; width: auto; height: auto; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  .nav { display: flex; gap: 4px; }
+  .content { grid-column: 1; grid-row: 3; }
+}
+
+@media (min-width: 561px) and (max-width: 900px) {
+  .overview-activity .table-wrap { overflow: visible; }
+  #recent-table { min-width: 0; table-layout: fixed; }
+  #recent-table th, #recent-table td { padding: 12px 8px; }
+  #recent-table th { white-space: normal; }
+  #recent-table td { overflow-wrap: anywhere; }
+  #recent-table td:nth-child(2), #recent-table td:nth-child(3), #recent-table td:nth-child(4) { white-space: nowrap; }
+}
+
+@media (max-width: 560px) {
+  .content { padding: 24px 16px calc(84px + env(safe-area-inset-bottom));   }
+  .page { gap: 24px; }
+  .overview-head { align-items: flex-start; flex-direction: row; gap: 8px 12px; }
+  .overview-head > div { flex: 1 1 220px; }
+  .overview-head h1 { font-size: 1.625rem; }
+  .overview-head p { font-size: 0.9rem; }
+  .overview-action { padding: 8px 12px; font-size: 0.84rem; }
+  .overview-action { min-height: 44px; }
+  .overview-activity { padding: 18px 16px; }
+  .overview-activity .section-heading { margin-bottom: 12px; }
+  .overview-activity .section-heading h2 { font-size: 1.05rem; }
+  .overview-activity .section-heading .muted { max-width: 26ch; font-size: 0.82rem; }
+  .overview-activity .section-heading .link { flex: none; font-size: 0.82rem; }
+  .stats .stat { min-width: 0; gap: 6px; padding: 12px; }
+  .stats .stat span { font-size: 0.82rem; line-height: 1.35; }
+  .stats .stat strong { overflow-wrap: anywhere; font-size: clamp(1.25rem, 7vw, 1.75rem); }
+
+  .overview-activity .table-wrap { overflow: visible; margin: 0; padding: 0; }
+  #recent-table { display: block; width: 100%; min-width: 0; font-size: 0.875rem; }
+  #recent-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  #recent-table tbody { display: grid; }
+  #recent-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  #recent-table tbody tr:last-child { border-bottom: 0; }
+  #recent-table td { min-width: 0; padding: 0; border: 0; background: transparent !important; white-space: normal; overflow-wrap: anywhere; }
+  #recent-table td + td { border-left: 0; }
+  #recent-table td::before { display: block; margin-bottom: 2px; color: var(--ink-2); font-size: 0.72rem; font-weight: 600; }
+  #recent-table td[data-label]::before { content: attr(data-label); }
+  #recent-table td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  #recent-table td:nth-child(2) { grid-column: 1; grid-row: 2; }
+  #recent-table td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  #recent-table td:nth-child(4) { grid-column: 1 / -1; grid-row: 3; }
+  #recent-table td:nth-child(5) { grid-column: 1 / -1; grid-row: 4; }
+  #recent-table td:nth-child(6) { grid-column: 2; grid-row: 1; text-align: right; }
+  #recent-table td.stacked { white-space: pre-line; font-weight: 700; }
+  #recent-table td.empty { grid-column: 1 / -1; padding: 20px 8px; text-align: left; }
+  #recent-table td.empty::before { content: none; }
+}
+
+@media (max-width: 370px) {
+  .overview-head { flex-direction: column; }
+  .overview-head > div { flex-basis: auto; }
+  .app-topbar .sidebar-footer { gap: 4px; }
+  .app-topbar .sidebar-footer .user-panel { gap: 4px; }
+  .app-topbar .sidebar-footer button { padding: 8px 6px; font-size: 0.75rem; white-space: nowrap; }
 }
 
 /* ---------- Dark mode ---------- */
