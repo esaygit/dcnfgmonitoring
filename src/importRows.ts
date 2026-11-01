@@ -1,7 +1,29 @@
-import type { ImportRow } from "./constants";
+import { ITEM_GROUPS, type Header, type ImportRow } from "./constants";
 import type { DuplicateProbe } from "./types";
 import { normalizedPallets } from "./parse";
 import { clean, compare, normalizedDate } from "./utils";
+
+const itemDescriptions = new Map(ITEM_GROUPS.flatMap(({ items }) => items));
+
+export function descriptionForItemCode(code: string) {
+  return itemDescriptions.get(clean(code)) ?? "";
+}
+
+export function invalidImportFields(row: ImportRow): Partial<Record<Header, string>> {
+  const invalid: Partial<Record<Header, string>> = {};
+  const required: [Header, string][] = [
+    ["Transaction Reference", "Transaction reference is required."],
+    ["Transferred From", "Source warehouse is required."],
+    ["Transferred To", "Destination warehouse is required."],
+    ["Item Code", "Item code is required."],
+    ["Description", "Description is required."],
+  ];
+  required.forEach(([field, reason]) => { if (!clean(row[field])) invalid[field] = reason; });
+  if (!normalizedDate(row["Document Date"], false)) invalid["Document Date"] = "Enter a valid date.";
+  const quantity = clean(row.Quantity).replace(/,/g, "");
+  if (!quantity || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) invalid.Quantity = "Enter a quantity greater than zero.";
+  return invalid;
+}
 
 // A possible duplicate needs the SAME batch code, the same quantity and at least one shared pallet.
 // Different batches of one transaction often share pallets and quantities, so they are not duplicates of each other.

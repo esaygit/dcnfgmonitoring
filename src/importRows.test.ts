@@ -1,10 +1,43 @@
 import { describe, expect, it } from "vitest";
 import { HEADERS, type ImportRow } from "./constants";
 import { groupTransfers, palletLines, stackLines } from "./grouping";
-import { localDuplicateIndex, sameQuantityAndPallet, sortReviewRows, toProbe } from "./importRows";
+import { descriptionForItemCode, invalidImportFields, localDuplicateIndex, sameQuantityAndPallet, sortReviewRows, toProbe } from "./importRows";
 import type { Transfer } from "./types";
 
 const makeRow = (overrides: Partial<ImportRow> = {}): ImportRow => ({ ...Object.fromEntries(HEADERS.map((header) => [header, ""])), ...overrides }) as ImportRow;
+
+describe("import row assistance", () => {
+  it("finds known item descriptions and leaves unknown codes unmapped", () => {
+    expect(descriptionForItemCode("4554770121")).toBe("RF MR EXP 50PPM");
+    expect(descriptionForItemCode(" unknown ")).toBe("");
+  });
+
+  it("reports missing required fields and invalid dates or quantities", () => {
+    const invalid = invalidImportFields(makeRow({ "Document Date": "31/02/2026", Quantity: "-2" }));
+
+    expect(invalid).toEqual({
+      "Transaction Reference": "Transaction reference is required.",
+      "Document Date": "Enter a valid date.",
+      "Transferred From": "Source warehouse is required.",
+      "Transferred To": "Destination warehouse is required.",
+      "Item Code": "Item code is required.",
+      Description: "Description is required.",
+      Quantity: "Enter a quantity greater than zero.",
+    });
+  });
+
+  it("accepts required fields with day-first dates and decimal quantities", () => {
+    expect(invalidImportFields(makeRow({
+      "Transaction Reference": "GAA123",
+      "Document Date": "27/10/2026",
+      "Transferred From": "W01",
+      "Transferred To": "W22",
+      "Item Code": "4554770121",
+      Description: "RF MR EXP 50PPM",
+      Quantity: "1,200.5",
+    }))).toEqual({});
+  });
+});
 
 describe("sameQuantityAndPallet", () => {
   const base = { quantity: "100", pallets: "1001, 1002", batch: "B1", item: "4554770121" };

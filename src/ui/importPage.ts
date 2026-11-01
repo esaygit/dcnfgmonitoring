@@ -2,9 +2,9 @@ import { $ } from "../dom";
 import { HEADERS, type ImportRow } from "../constants";
 import { checkDuplicates, insertTransfers } from "../api";
 import { parse, pdfTime } from "../parse";
-import { localDuplicateIndex, sortReviewRows, toProbe } from "../importRows";
+import { descriptionForItemCode, invalidImportFields, localDuplicateIndex, sortReviewRows, toProbe } from "../importRows";
 import type { NewTransfer } from "../types";
-import { clean, debounce, isoDate, transactionReferences } from "../utils";
+import { clean, debounce, normalizedDate, transactionReferences } from "../utils";
 import { message } from "./toast";
 
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button");
@@ -12,14 +12,84 @@ const review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectio
 const addRow = $<HTMLButtonElement>("#add-row-button"), save = $<HTMLButtonElement>("#save-button"), reset = $<HTMLButtonElement>("#reset-button");
 const dropZone = $<HTMLElement>("#drop-zone"), fileList = $<HTMLUListElement>("#file-list"), clearFiles = $<HTMLButtonElement>("#clear-files-button");
 const reviewDuplicateWarning = $<HTMLParagraphElement>("#review-duplicate-warning");
+const pdfPreviewPanel = $<HTMLElement>("#pdf-preview-panel"), pdfPreviewSelect = $<HTMLSelectElement>("#pdf-preview-file"), pdfPreviewFrame = $<HTMLIFrameElement>("#pdf-preview-frame");
 
 let rows: ImportRow[] = [];
 const rowSource = new WeakMap<ImportRow, string>(); // which PDF each review row came from
 const rowTime = new WeakMap<ImportRow, string>(); // time (HH:MM:SS) printed inside that PDF
 const savedDuplicate = new WeakMap<ImportRow, string>(); // review row -> reference of the saved record it matches
 const reviewSources = new Set<string>(); // PDFs whose rows are currently in review
+const skippedRows = new WeakSet<ImportRow>();
+const previewFiles = new Map<string, File>();
+const DRAFT_KEY = "dcn.importDraft";
 let reviewRowEls: HTMLTableRowElement[] = [];
 let afterSave: () => Promise<void> = async () => {};
+let previewUrl: string | null = null;
+let draftWriteFailed = false;
+
+function persistDraft() {
+  try {
+    if (!rows.length) { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(rows.map((row) => ({
+      row, source: rowSource.get(row) ?? "", time: rowTime.get(row) ?? "", skipped: skippedRows.has(row),
+    }))));
+  } catch {
+    if (!draftWriteFailed) message("This browser could not save the import draft. Keep this tab open until you finish.", "error");
+    draftWriteFailed = true;
+  }
+}
+const persistDraftSoon = debounce(persistDraft, 250);
+
+function releasePreview() {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null;
+  pdfPreviewFrame.removeAttribute("src");
+}
+
+function showPdfPreview() {
+  const file = previewFiles.get(pdfPreviewSelect.value);
+  releasePreview();
+  if (!file) return;
+  previewUrl = URL.createObjectURL(file);
+  pdfPreviewFrame.src = previewUrl;
+}
+
+function renderPdfPreview() {
+  const sources = [...new Set(rows.map((row) => rowSource.get(row)).filter((source): source is string => Boolean(source)))];
+  const available = sources.filter((source) => previewFiles.has(source));
+  pdfPreviewPanel.classList.toggle("hidden", !available.length);
+  pdfPreviewSelect.replaceChildren(...available.map((source) => new Option(source, source)));
+  if (available.length) showPdfPreview();
+  else releasePreview();
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const saved: unknown = JSON.parse(raw);
+    if (!Array.isArray(saved)) throw new Error("The stored draft has an invalid format.");
+    for (const entry of saved) {
+      if (!entry || typeof entry !== "object" || !entry.row || HEADERS.some((header) => typeof entry.row[header] !== "string")) {
+        throw new Error("The stored draft has an invalid row.");
+      }
+      const row = entry.row as ImportRow;
+      rows.push(row);
+      if (typeof entry.source === "string" && entry.source) rowSource.set(row, entry.source);
+      if (typeof entry.time === "string" && entry.time) rowTime.set(row, entry.time);
+      if (entry.skipped === true) skippedRows.add(row);
+    }
+    if (rows.length) {
+      review.classList.remove("hidden");
+      sortReviewRows(rows, (row) => rowTime.get(row));
+      renderRows();
+      message(`Restored ${rows.length} reviewed import row${rows.length === 1 ? "" : "s"} from this browser.`, "success");
+    }
+  } catch (error) {
+    localStorage.removeItem(DRAFT_KEY);
+    message(`Could not restore the saved import draft: ${error instanceof Error ? error.message : "invalid draft"}`, "error");
+  }
+}
 
 // ---- Duplicate highlighting: other review rows (instant) and saved records (asked from the database) ----
 function duplicateMatch(row: ImportRow, index: number) {
@@ -62,48 +132,96 @@ function refreshReviewDuplicates() {
 
 // Full render: only when rows are added or removed.
 function renderRows() {
-  reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th>Source file</th><th></th></tr>`;
+  reviewHead.innerHTML = `<tr>${HEADERS.map((header) => `<th>${header}</th>`).join("")}<th>Source file</th><th>Skip</th><th></th></tr>`;
   reviewBody.innerHTML = "";
   reviewRowEls = rows.map((row, index) => {
+    if (!clean(row.Description)) row.Description = descriptionForItemCode(row["Item Code"]) || row.Description;
     const tr = document.createElement("tr");
+    tr.classList.toggle("skipped-row", skippedRows.has(row));
     HEADERS.forEach((header) => {
       const td = document.createElement("td"), input = document.createElement("input");
-      input.value = row[header]; input.setAttribute("aria-label", `${header}, row ${index + 1}`);
-      input.addEventListener("input", () => { row[header] = input.value; refreshReviewDuplicates(); scheduleServerCheck(); });
+      input.value = row[header]; input.dataset.field = header; input.setAttribute("aria-label", `${header}, row ${index + 1}`);
+      input.addEventListener("input", () => {
+        row[header] = input.value;
+        if (header === "Item Code") {
+          const description = descriptionForItemCode(input.value);
+          if (description) {
+            row.Description = description;
+            const descriptionInput = tr.querySelector<HTMLInputElement>('[data-field="Description"]');
+            if (descriptionInput) descriptionInput.value = description;
+          }
+        }
+        updateRowValidation(tr, row);
+        refreshReviewDuplicates(); scheduleServerCheck(); persistDraftSoon();
+      });
       td.append(input); tr.append(td);
     });
     const time = rowTime.get(row), source = `${rowSource.get(row) ?? "Added manually"}${time ? ` · ${time.slice(0, 5)}` : ""}`, sourceCell = document.createElement("td");
     sourceCell.className = "source-cell"; sourceCell.textContent = source; sourceCell.title = source; tr.append(sourceCell);
     const td = document.createElement("td"), remove = document.createElement("button");
     remove.type = "button"; remove.className = "remove-row"; remove.textContent = "Remove";
-    remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); });
-    td.append(remove); tr.append(td); reviewBody.append(tr);
+    remove.addEventListener("click", () => { rows.splice(index, 1); renderRows(); persistDraft(); });
+    const skipCell = document.createElement("td"), skip = document.createElement("input");
+    skip.type = "checkbox"; skip.checked = skippedRows.has(row); skip.setAttribute("aria-label", `Skip row ${index + 1}`);
+    skip.addEventListener("change", () => {
+      if (skip.checked) skippedRows.add(row); else skippedRows.delete(row);
+      tr.classList.toggle("skipped-row", skip.checked);
+      refreshReviewDuplicates(); persistDraft();
+    });
+    skipCell.append(skip);
+    td.append(remove); tr.append(skipCell, td); reviewBody.append(tr);
+    updateRowValidation(tr, row);
     return tr;
   });
   refreshReviewDuplicates();
   scheduleServerCheck();
+  renderPdfPreview();
+  persistDraftSoon();
+}
+
+function updateRowValidation(tr: HTMLTableRowElement, row: ImportRow) {
+  const invalid = invalidImportFields(row);
+  HEADERS.forEach((header) => {
+    const input = tr.querySelector<HTMLInputElement>(`[data-field="${header}"]`);
+    if (!input) return;
+    const reason = invalid[header];
+    const unknownItem = header === "Item Code" && Boolean(clean(row[header])) && !descriptionForItemCode(row[header]);
+    input.setAttribute("aria-invalid", String(Boolean(reason)));
+    input.classList.toggle("field-invalid", Boolean(reason));
+    input.classList.toggle("unknown-item-code", unknownItem);
+    input.title = reason ?? (unknownItem ? "Unknown item code; verify the code and description." : "");
+  });
 }
 
 // ---- Save ----
 async function saveRows() {
   if (!rows.length) return;
-  const data: NewTransfer[] = rows.map((row) => {
+  const includedRows = rows.filter((row) => !skippedRows.has(row));
+  if (!includedRows.length) { message("Every row is marked to skip. Include at least one row to save.", "error"); return; }
+  const invalidIndex = includedRows.findIndex((row) => Object.keys(invalidImportFields(row)).length > 0);
+  if (invalidIndex >= 0) {
+    reviewRowEls.forEach((tr, index) => updateRowValidation(tr, rows[index]));
+    review.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
+    message("Correct the fields marked in red, or skip rows you do not want to save.", "error");
+    return;
+  }
+  const data: NewTransfer[] = includedRows.map((row) => {
     const quantity = row.Quantity.replace(/,/g, "").trim();
     return {
-      transaction_reference: clean(row["Transaction Reference"]), document_date: isoDate(clean(row["Document Date"])), document_time: rowTime.get(row) ?? null,
+      transaction_reference: clean(row["Transaction Reference"]), document_date: normalizedDate(clean(row["Document Date"]), false), document_time: rowTime.get(row) ?? null,
       transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description),
       product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: quantity === "" ? NaN : Number(quantity),
       pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: rowSource.get(row) ?? "manual entry",
     };
   });
-  if (data.some((row) => !row.transaction_reference || !row.document_date || !row.transferred_from || !row.transferred_to || !row.item_code || !row.description || !Number.isFinite(row.quantity))) { message("Complete all required fields and use a valid document date and quantity before saving.", "error"); return; }
   save.disabled = true;
   message("Saving records to the shared dashboard…", "", 0);
   let saveError: string | undefined;
   try { await insertTransfers(data); } catch (error) { saveError = error instanceof Error ? error.message : "Unexpected error."; } finally { save.disabled = false; }
   if (saveError) { message(`Could not save records: ${saveError}`, "error"); return; }
-  rows = []; reviewSources.clear(); review.classList.add("hidden"); renderQueue();
-  message(`${data.length} record${data.length === 1 ? "" : "s"} saved to the shared dashboard.`, "success");
+  const skippedCount = rows.length - includedRows.length;
+  rows = []; reviewSources.clear(); previewFiles.clear(); releasePreview(); review.classList.add("hidden"); renderQueue(); persistDraft();
+  message(`${data.length} record${data.length === 1 ? "" : "s"} saved${skippedCount ? `; ${skippedCount} skipped` : ""}.`, "success");
   await afterSave();
   location.hash = "#/records";
 }
@@ -159,6 +277,7 @@ async function extractAll() {
       const { pdfText } = await import("../pdfText"); // pdf.js is only downloaded when the first PDF is read
       const text = await pdfText(item.file);
       const parsed = parse(text, item.file.name), time = pdfTime(text);
+      previewFiles.set(item.file.name, item.file);
       parsed.rows.forEach((row) => { rowSource.set(row, item.file.name); if (time) rowTime.set(row, time); });
       rows.push(...parsed.rows); reviewSources.add(fileKey(item.file));
       added += parsed.rows.length; done++; if (parsed.filenameBatches > 1) split++;
@@ -181,6 +300,7 @@ async function extractAll() {
 
 export function initImport(onSaved: () => Promise<void>) {
   afterSave = onSaved;
+  pdfPreviewSelect.addEventListener("change", showPdfPreview);
   pdf.addEventListener("change", () => { addFiles(Array.from(pdf.files ?? [])); pdf.value = ""; }); // reset so the same file can be picked again
   clearFiles.addEventListener("click", () => { if (extracting) return; queue = []; renderQueue(); });
 
@@ -194,8 +314,9 @@ export function initImport(onSaved: () => Promise<void>) {
   for (const type of ["dragover", "drop"]) window.addEventListener(type, (event) => { if (hasFiles(event as DragEvent)) event.preventDefault(); });
 
   extract.addEventListener("click", () => void extractAll());
-  addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); });
+  addRow.addEventListener("click", () => { rows.push(Object.fromEntries(HEADERS.map((header) => [header, ""])) as ImportRow); renderRows(); persistDraft(); });
   save.addEventListener("click", () => void saveRows());
-  reset.addEventListener("click", () => { rows = []; reviewSources.clear(); review.classList.add("hidden"); message("Import discarded."); });
+  reset.addEventListener("click", () => { rows = []; reviewSources.clear(); previewFiles.clear(); releasePreview(); review.classList.add("hidden"); persistDraft(); message("Import discarded."); });
   renderQueue();
+  restoreDraft();
 }

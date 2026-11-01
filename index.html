@@ -196,7 +196,15 @@
               <button id="add-row-button" type="button" class="secondary">Add row</button>
             </div>
             <p id="review-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>
-            <div class="table-wrap"><table id="review-table"><thead></thead><tbody></tbody></table></div>
+            <div class="import-review-layout">
+              <section id="pdf-preview-panel" class="pdf-preview hidden" aria-label="Source PDF preview">
+                <label for="pdf-preview-file">PDF source
+                  <select id="pdf-preview-file"></select>
+                </label>
+                <iframe id="pdf-preview-frame" title="Source transfer PDF"></iframe>
+              </section>
+              <div class="table-wrap"><table id="review-table"><thead></thead><tbody></tbody></table></div>
+            </div>
             <div class="actions">
               <button id="save-button" type="button">Save records</button>
               <button id="reset-button" type="button" class="secondary">Discard import</button>
@@ -246,7 +254,7 @@
 
     <!-- Transaction details -->
     <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
-    <aside id="drawer" class="drawer hidden" role="dialog" aria-labelledby="drawer-title" aria-hidden="true">
+    <aside id="drawer" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true" tabindex="-1">
       <div class="drawer-head">
         <div><p class="muted drawer-kicker">Transaction</p><h2 id="drawer-title"></h2></div>
         <button id="drawer-close" type="button" class="secondary">Close</button>

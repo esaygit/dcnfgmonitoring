@@ -73,14 +73,15 @@ export function openDrawer(members: Transfer[], trigger?: HTMLElement) {
   title.textContent = members[0].transaction_reference || "Transaction";
   body.replaceChildren(buildDetails(members));
   drawer.classList.remove("hidden"); backdrop.classList.remove("hidden");
+  drawer.classList.add("is-open"); backdrop.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("drawer-open");
   closeButton.focus();
 }
 
 export function closeDrawer() {
-  if (drawer.classList.contains("hidden")) return;
-  drawer.classList.add("hidden"); backdrop.classList.add("hidden");
+  if (!drawer.classList.contains("is-open")) return;
+  drawer.classList.remove("is-open"); backdrop.classList.remove("is-open");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("drawer-open");
   lastFocus?.focus();
@@ -90,5 +91,17 @@ export function closeDrawer() {
 export function initDrawer() {
   closeButton.addEventListener("click", closeDrawer);
   backdrop.addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
+  document.addEventListener("keydown", (event) => {
+    if (!drawer.classList.contains("is-open")) return;
+    if (event.key === "Escape") { closeDrawer(); return; }
+    if (event.key !== "Tab") return;
+    const focusable = [...drawer.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) { event.preventDefault(); drawer.focus(); return; }
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement))) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement))) {
+      event.preventDefault(); first.focus();
+    }
+  });
 }

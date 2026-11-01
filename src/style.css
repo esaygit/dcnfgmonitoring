@@ -12,6 +12,8 @@
   --danger: #c2412d;
   --ok: #1c7a52;
   --radius: 20px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
   color: var(--ink);
   background: var(--bg);
@@ -38,8 +40,9 @@ button {
   border-radius: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 150ms ease, transform 140ms var(--ease-out);
 }
+button:active:not(:disabled) { transform: scale(0.97); }
 button:hover:not(:disabled) { background: var(--sky-hover); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.secondary { background: var(--tint); color: var(--ink); }
