@@ -12,6 +12,42 @@ function client() {
   return supabase;
 }
 
+type DashboardStatsResponse = {
+  records?: number;
+  quantity?: number;
+  references?: number;
+  destinations?: number;
+  items?: {
+    item_code: string;
+    description?: string | null;
+    transactions?: number;
+    quantity?: number;
+    batches?: number;
+    pallets?: number;
+    destinations?: number;
+    latest_date?: string | null;
+  }[];
+} | null;
+
+export function mapDashboardStats(stats: DashboardStatsResponse): DashboardStats {
+  return {
+    records: Number(stats?.records ?? 0),
+    quantity: Number(stats?.quantity ?? 0),
+    references: Number(stats?.references ?? 0),
+    destinations: Number(stats?.destinations ?? 0),
+    items: (stats?.items ?? []).map((item) => ({
+      itemCode: item.item_code,
+      description: item.description ?? "",
+      transactions: Number(item.transactions ?? 0),
+      quantity: Number(item.quantity ?? 0),
+      batches: Number(item.batches ?? 0),
+      pallets: Number(item.pallets ?? 0),
+      destinations: Number(item.destinations ?? 0),
+      latestDate: item.latest_date ?? "",
+    })),
+  };
+}
+
 /** One page of transactions (all batches of each transaction included), filtered and sorted in Postgres. */
 export async function fetchRecords(filters: RecordFilters, page: number, pageSize: number): Promise<RecordsPage> {
   const { data, error } = await client().rpc("records_page", {
@@ -53,20 +89,7 @@ export async function fetchAllRecords(filters: RecordFilters, onProgress?: (done
 export async function fetchStats(from: string | null, to: string | null): Promise<DashboardStats> {
   const { data, error } = await client().rpc("dashboard_stats", { p_from: from, p_to: to });
   if (error) throw new Error(error.message);
-  const stats = data as {
-    records?: number; quantity?: number; references?: number; destinations?: number;
-    items?: { item_code: string; description: string; transactions: number; quantity: number; batches: number; pallets: number; destinations: number; latest_date: string | null }[];
-  } | null;
-  return {
-    records: Number(stats?.records ?? 0),
-    quantity: Number(stats?.quantity ?? 0),
-    references: Number(stats?.references ?? 0),
-    destinations: Number(stats?.destinations ?? 0),
-    items: (stats?.items ?? []).map((item) => ({
-      itemCode: item.item_code, description: item.description ?? "", transactions: Number(item.transactions), quantity: Number(item.quantity),
-      batches: Number(item.batches), pallets: Number(item.pallets), destinations: Number(item.destinations), latestDate: item.latest_date ?? "",
-    })),
-  };
+  return mapDashboardStats(data as DashboardStatsResponse);
 }
 
 /** Asks the database which review rows match an already saved record. Returns row index to transaction reference. */

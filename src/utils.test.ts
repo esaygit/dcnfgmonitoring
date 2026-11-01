@@ -14,7 +14,7 @@ describe("normalizedDate", () => {
 });
 
 describe("displayDate", () => {
-  it("formats as MM-DD-YYYY", () => expect(displayDate("2026-10-27")).toBe("10-27-2026"));
+  it("formats as DD/MM/YYYY", () => expect(displayDate("2026-10-27")).toBe("27/10/2026"));
   it("returns an empty string for bad input", () => expect(displayDate("")).toBe(""));
 });
 

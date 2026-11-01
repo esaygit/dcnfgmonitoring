@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { HEADERS, itemFilterName } from "../constants";
 import type { RecordFilters, RecordsPage, SortMode } from "../types";
-import { debounce, displayDate, normalizedDate, transactionReferences } from "../utils";
+import { debounce, displayDate, fmt, normalizedDate, transactionReferences } from "../utils";
 import { groupTransfers, palletLines } from "../grouping";
 import { fetchAllRecords, fetchRecords } from "../api";
 import { buildItemPicker, fillItems } from "./itemPicker";
@@ -15,6 +15,7 @@ const recordsTable = $<HTMLTableElement>("#records-table"), recordsHead = $<HTML
 const recordsDescription = $<HTMLElement>("#records-description"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const pageInfo = $<HTMLElement>("#page-info"), pageSizeSelect = $<HTMLSelectElement>("#page-size"), pagePrev = $<HTMLButtonElement>("#page-prev"), pageNext = $<HTMLButtonElement>("#page-next"), pagination = $<HTMLElement>("#records-pagination");
 
+const RECORD_HEADERS = [...HEADERS, "Document Time"] as const;
 const HIDDEN_KEY = "dcn.hiddenColumns";
 const LOCKED = new Set<number>([0]); // the reference column cannot be hidden
 let page = 0, pageSize = Number(pageSizeSelect.value) || 50, requestId = 0;
@@ -25,7 +26,7 @@ let syncItemPicker: () => void = () => {};
 function loadHidden() {
   try {
     const list: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]");
-    return new Set(Array.isArray(list) ? list.filter((n): n is number => Number.isInteger(n) && n > 0 && n < HEADERS.length) : []);
+    return new Set(Array.isArray(list) ? list.filter((n): n is number => Number.isInteger(n) && n > 0 && n < RECORD_HEADERS.length) : []);
   } catch { return new Set<number>(); }
 }
 function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* storage unavailable */ } }
@@ -83,7 +84,7 @@ function render() {
     : "";
 
   recordsTable.style.minWidth = hidden.size ? "0" : "";
-  recordsHead.innerHTML = `<tr>${HEADERS.map((header, index) => `<th${hidden.has(index) ? ' class="col-hidden"' : ""}>${header}</th>`).join("")}</tr>`;
+  recordsHead.innerHTML = `<tr>${RECORD_HEADERS.map((header, index) => `<th${hidden.has(index) ? ' class="col-hidden"' : ""}>${header}</th>`).join("")}</tr>`;
   recordsBody.innerHTML = "";
 
   for (const members of groupTransfers(result.rows)) {
@@ -103,13 +104,13 @@ function render() {
         body.append(line);
       });
     };
-    const values = [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])];
+    const values = [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))]), first.document_time?.slice(0, 5) ?? ""];
     values.forEach((value, index) => {
       const td = document.createElement("td"), body = document.createElement("div");
-      td.dataset.label = HEADERS[index]; body.className = "cell-body";
+      td.dataset.label = RECORD_HEADERS[index]; body.className = "cell-body";
       if (hidden.has(index)) td.classList.add("col-hidden");
       if (index === 7) { td.classList.add("stacked"); stackCell(body, (transfer) => transfer.batch_code ?? ""); }
-      else if (index === 8) { td.classList.add("stacked"); stackCell(body, (transfer) => String(transfer.quantity)); }
+      else if (index === 8) { td.classList.add("stacked"); stackCell(body, (transfer) => fmt(Number(transfer.quantity))); }
       else {
         body.textContent = value;
         if (index === 9) td.classList.add("stacked");
@@ -121,7 +122,7 @@ function render() {
   }
   if (!result.rows.length) {
     const tr = document.createElement("tr"), td = document.createElement("td");
-    td.colSpan = HEADERS.length; td.className = "empty";
+    td.colSpan = RECORD_HEADERS.length; td.className = "empty";
     td.textContent = isFiltered(f) ? "No records match your search." : "No transfers yet. Import an IWTS PDF to add your first records.";
     tr.append(td); recordsBody.append(tr);
   }
@@ -140,7 +141,7 @@ function buildColumnPicker() {
   const button = document.createElement("button"), menu = document.createElement("div"), boxes: HTMLInputElement[] = [];
   button.type = "button"; button.className = "secondary"; button.textContent = "Columns"; button.setAttribute("aria-haspopup", "true"); button.setAttribute("aria-expanded", "false");
   menu.className = "columns-menu hidden"; menu.setAttribute("role", "group"); menu.setAttribute("aria-label", "Visible columns");
-  HEADERS.forEach((header, index) => {
+  RECORD_HEADERS.forEach((header, index) => {
     if (LOCKED.has(index)) return;
     const label = document.createElement("label"), box = document.createElement("input");
     box.type = "checkbox"; box.checked = !hidden.has(index);

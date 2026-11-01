@@ -19,10 +19,10 @@ export function normalizedDate(value: string, monthFirst = true) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 export function isoDate(value: string) { return normalizedDate(value); }
-/** MM-DD-YYYY, the format used across the UI. */
-export function displayDate(value: string, monthFirst = true) {
-  const [year, month, day] = normalizedDate(value, monthFirst).split("-");
-  return year ? `${month}-${day}-${year}` : "";
+/** DD/MM/YYYY, the format used across the UI and exported workbooks. */
+export function displayDate(value: string) {
+  const [year, month, day] = normalizedDate(value, false).split("-");
+  return year ? `${day}/${month}/${year}` : "";
 }
 
 /** Returns HH:MM:SS (24-hour), or "" when the value is not a valid time. Accepts "14:32", "14:32:10" and "2:05 PM". */

@@ -139,7 +139,7 @@ as $$
   items as (
     select f.item_code,
            max(f.description) as description,
-           count(*) as records,
+           count(distinct f.transaction_reference) as transactions,
            coalesce(sum(f.quantity), 0) as quantity,
            count(distinct nullif(btrim(f.batch_code), '')) as batches,
            count(distinct nullif(btrim(f.transferred_to), '')) as destinations,
@@ -157,7 +157,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
                'item_code', i.item_code,
                'description', coalesce(i.description, ''),
-               'records', i.records,
+               'transactions', i.transactions,
                'quantity', i.quantity,
                'batches', i.batches,
                'pallets', coalesce(pc.pallets, 0),

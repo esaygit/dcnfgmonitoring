@@ -1,7 +1,7 @@
 import { $, emptyRow } from "../dom";
 import { fetchRecords, fetchStats } from "../api";
 import { groupTransfers, stackLines } from "../grouping";
-import { displayDate } from "../utils";
+import { displayDate, fmt } from "../utils";
 import { message } from "./toast";
 
 const recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
@@ -21,7 +21,7 @@ export async function loadOverview() {
     const labels = ["Reference", "Date", "From", "To", "Description", "Quantity"];
     for (const members of groupTransfers(recent.rows)) {
       const [first] = members, tr = document.createElement("tr");
-      [first.transaction_reference, displayDate(first.document_date, true), first.transferred_from, first.transferred_to, first.description, stackLines(members, (transfer) => String(transfer.quantity))].forEach((value, index) => {
+      [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.description, stackLines(members, (transfer) => fmt(Number(transfer.quantity)))].forEach((value, index) => {
         const td = document.createElement("td");
         td.dataset.label = labels[index];
         td.textContent = value;
