@@ -23,7 +23,17 @@ export type ParsedImport = { rows: import("./constants").ImportRow[]; filenameBa
 
 export type SortMode = "date-desc" | "date-asc" | "qty-desc" | "qty-asc";
 
-export type RecordFilters = { query: string; dateFrom: string; dateTo: string; batch: string; item: string; sort: SortMode };
+export type RecordFilters = {
+  query: string;
+  dateFrom: string;
+  dateTo: string;
+  batch: string;
+  item: string;
+  sort: SortMode;
+  fromWarehouse?: string;
+  toWarehouse?: string;
+  pallet?: string;
+};
 
 /** One page of the Records table. Pages are made of whole transactions (all batches of a transaction stay together). */
 export type RecordsPage = { rows: Transfer[]; totalGroups: number; totalRecords: number; totalQuantity: number };

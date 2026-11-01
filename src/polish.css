@@ -241,6 +241,8 @@ body.drawer-open { overflow: hidden; }
 .pdf-preview { display: grid; align-content: start; gap: 10px; min-width: 0; }
 .pdf-preview label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 700; }
 .pdf-preview iframe { width: 100%; min-height: 480px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.filter-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.filter-presets #share-filter-url { flex: 1 1 280px; min-width: 220px; }
 #review-table input.field-invalid { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 #review-table input.unknown-item-code { border-color: #b7791f; }
 #review-table tbody tr.skipped-row { opacity: 0.55; }

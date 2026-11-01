@@ -25,7 +25,10 @@ create or replace function public.records_page(
   p_items text[] default null,
   p_sort text default 'date-desc',
   p_limit int default 50,
-  p_offset int default 0
+  p_offset int default 0,
+  p_from_warehouse text default '',
+  p_to_warehouse text default '',
+  p_pallet text default ''
 ) returns jsonb
 language sql stable
 as $$
@@ -46,6 +49,12 @@ as $$
       and (p_to is null or t.document_date <= p_to)
       and (params.b = '' or strpos(lower(coalesce(t.batch_code, '')), params.b) > 0)
       and (p_items is null or t.item_code = any (p_items))
+      and (btrim(coalesce(p_from_warehouse, '')) = '' or strpos(lower(coalesce(t.transferred_from, '')), lower(btrim(p_from_warehouse))) > 0)
+      and (btrim(coalesce(p_to_warehouse, '')) = '' or strpos(lower(coalesce(t.transferred_to, '')), lower(btrim(p_to_warehouse))) > 0)
+      and (btrim(coalesce(p_pallet, '')) = '' or exists (
+        select 1 from unnest(t.pallets) as p(value)
+        where lower(btrim(p.value)) = lower(btrim(p_pallet))
+      ))
   ),
   groups as (
     select f.transaction_reference, f.document_date, f.transferred_from, f.transferred_to,
@@ -191,8 +200,10 @@ $$;
 
 -- Only signed-in users may call these.
 revoke all on function public.records_page(text, date, date, text, text[], text, int, int) from public, anon;
+revoke all on function public.records_page(text, date, date, text, text[], text, int, int, text, text, text) from public, anon;
 revoke all on function public.dashboard_stats(date, date) from public, anon;
 revoke all on function public.check_duplicates(jsonb) from public, anon;
 grant execute on function public.records_page(text, date, date, text, text[], text, int, int) to authenticated;
+grant execute on function public.records_page(text, date, date, text, text[], text, int, int, text, text, text) to authenticated;
 grant execute on function public.dashboard_stats(date, date) to authenticated;
 grant execute on function public.check_duplicates(jsonb) to authenticated;

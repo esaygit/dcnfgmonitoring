@@ -6,7 +6,8 @@ Shared dashboard for IWTS transfer PDFs: import, review, save, browse, analyse a
 
 1. Create `.env.local` from `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`).
 2. In the Supabase SQL editor run `supabase/server-side-records.sql` (adds `document_time`, indexes and the
-   `records_page`, `dashboard_stats` and `check_duplicates` functions the app calls).
+   `records_page`, `dashboard_stats` and `check_duplicates` functions the app calls). Re-run this script
+   after pulling changes that update its database functions.
 3. `npm install`, then `npm run dev`.
 
 For GitHub Pages, add the same two values as repository secrets.
@@ -39,5 +40,6 @@ supabase/
 
 ## Parser tests
 
-`src/parse.test.ts` uses synthetic text that follows the layout the regexes expect. Add fixtures from real PDFs
-(remove confidential data first) so that format changes are caught by `npm test`.
+`npm test` covers parsing, import validation, API response mapping, CSV output, and shareable record filters.
+`src/parse.test.ts` currently uses synthetic text that follows the layout the regexes expect. Add fixtures from
+real PDFs (remove confidential data first) so that format changes are caught by `npm test`.

@@ -25,7 +25,7 @@ const scheduleRefresh = debounce(() => void refreshAll(), 500);
 // ---- Routing ----
 const PAGES = ["overview", "analytics", "import", "records"];
 function route() {
-  const hash = location.hash.replace(/^#\//, ""), name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
+  const hash = location.hash.replace(/^#\//, "").split("?", 1)[0], name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));
   document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((link) => {
     const on = link.dataset.nav === current;

@@ -59,6 +59,9 @@ export async function fetchRecords(filters: RecordFilters, page: number, pageSiz
     p_sort: filters.sort,
     p_limit: pageSize,
     p_offset: page * pageSize,
+    p_from_warehouse: filters.fromWarehouse?.trim() ?? "",
+    p_to_warehouse: filters.toWarehouse?.trim() ?? "",
+    p_pallet: filters.pallet?.trim() ?? "",
   });
   if (error) throw new Error(error.message);
   const result = data as { rows?: Transfer[]; total_groups?: number; total_records?: number; total_quantity?: number } | null;
