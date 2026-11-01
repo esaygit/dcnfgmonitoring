@@ -41,5 +41,6 @@ supabase/
 ## Parser tests
 
 `npm test` covers parsing, import validation, API response mapping, CSV output, and shareable record filters.
-`src/parse.test.ts` currently uses synthetic text that follows the layout the regexes expect. Add fixtures from
-real PDFs (remove confidential data first) so that format changes are caught by `npm test`.
+Parser tests include both synthetic text and a sanitized text extraction from a real IWTS slip in
+`src/fixtures/iwts-interwarehouse-transfer.txt`. Add additional real-PDF text fixtures only after removing
+confidential details.

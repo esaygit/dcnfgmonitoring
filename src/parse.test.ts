@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { batchesFromFilename, palletsFromFilename, parse, pdfTime } from "./parse";
 
-// These fixtures are SYNTHETIC: they follow the layout the regexes expect, not a real IWTS PDF.
-// To add a real one: in src/ui/importPage.ts temporarily add console.log(text) after pdfText(...),
-// import a PDF, copy the logged text into a fixture here (remove anything confidential) and assert on the result.
+// TEXT is synthetic; the sanitized IWTS fixture below is extracted from a user-supplied PDF.
 const TEXT = "TRANSFER DOCUMENT GAA 123456 DOCUMENT DATE : 2026-10-27 DOCUMENT TIME : 14:32:10 SHIP FROM : W01 SHIP TO : W22 4554770121 RF MR EXP 50PPM 0041234LOC B240101 1,200 BAGS";
+const IWTS_FIXTURE = readFileSync(join(import.meta.dirname, "fixtures", "iwts-interwarehouse-transfer.txt"), "utf8");
 
 describe("pdfTime", () => {
   it("reads DOCUMENT TIME", () => expect(pdfTime("DOCUMENT DATE: 2026-10-27 DOCUMENT TIME: 08:15:30")).toBe("08:15:30"));
@@ -31,6 +32,27 @@ describe("batchesFromFilename", () => {
 });
 
 describe("parse", () => {
+  it("extracts transfer rows from a sanitized real IWTS interwarehouse slip", () => {
+    const filename = "GAA000001 RF MR EXPORT (10 PPM) 00001H 60 BAGS PALLET 1001 1002 1003 10032026.pdf";
+    const result = parse(IWTS_FIXTURE, filename);
+
+    expect(pdfTime(IWTS_FIXTURE)).toBe("15:41:00");
+    expect(result.filenameBatches).toBe(1);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      "Transaction Reference": "GAA000001",
+      "Document Date": "2026-10-03",
+      "Transferred From": "W00001",
+      "Transferred To": "W00002",
+      "Item Code": "4554770121",
+      "Description": "RF DCN MR 50PPM SULF 25KG",
+      "Product Code": "",
+      "Batch Code": "00001H-RF-MR-EXPORT",
+      "Quantity": "60.00",
+      "Pallets": "1001, 1002, 1003",
+    });
+  });
+
   it("extracts the header fields and one item line", () => {
     const { rows, filenameBatches } = parse(TEXT, "PALLETS 1001 1002 20261027.pdf");
     expect(filenameBatches).toBe(0);

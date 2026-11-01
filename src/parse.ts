@@ -42,8 +42,9 @@ export function parse(text: string, filename: string): ParsedImport {
     "Pallets": palletsFromFilename(filename),
   };
   const items = [...text.matchAll(/(?:^|\s)(\d{8,})\s*(.*?)\s+([A-Z0-9-]+)LOC\s+([A-Z0-9-]+)\s+([\d,]+(?:\.\d+)?)(?=\s+)/gi)];
+  const hasLocationColumn = /\bLocation\s+Lot\s+Quantity\b/i.test(text);
   const filenameBatches = batchesFromFilename(filename);
-  const itemRows = items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
+  const itemRows = items.map((item) => ({ ...base, "Item Code": clean(item[1]), "Description": clean(item[2]), "Product Code": hasLocationColumn ? "" : clean(item[3]), "Batch Code": clean(item[4]), "Quantity": clean(item[5]) }));
   if (filenameBatches.length > 1 && itemRows.length <= 1) {
     const template = itemRows[0] ?? { ...base, "Item Code": "", "Description": "", "Product Code": "", "Batch Code": "", "Quantity": "" };
     return { rows: filenameBatches.map(({ batch, quantity }) => ({ ...template, "Batch Code": batch, Quantity: quantity })), filenameBatches: filenameBatches.length };
