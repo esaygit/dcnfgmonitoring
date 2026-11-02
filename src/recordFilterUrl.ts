@@ -2,20 +2,6 @@ import type { RecordFilters, SortMode } from "./types";
 
 const SORT_MODES: SortMode[] = ["date-desc", "date-asc", "qty-desc", "qty-asc"];
 
-export function serializeRecordFilters(filters: RecordFilters) {
-  const params = new URLSearchParams();
-  const values: Record<string, string> = {
-    query: filters.query,
-    from: filters.dateFrom,
-    to: filters.dateTo,
-    batch: filters.batch,
-    item: filters.item,
-    sort: filters.sort,
-  };
-  Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
-  return params.toString();
-}
-
 export function parseRecordFilters(search: string): Partial<RecordFilters> {
   const params = new URLSearchParams(search);
   const sort = params.get("sort");

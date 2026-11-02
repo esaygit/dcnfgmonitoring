@@ -27,7 +27,7 @@
     <!-- Sign in -->
     <section id="auth-section" class="auth">
       <div class="auth-brand">
-        <span class="logo" aria-hidden="true"></span>
+        <span class="logo" aria-hidden="true"><svg viewBox="0 0 28 28" focusable="false"><path d="M6 7h15M6 14h10M6 21h15M3 7h.01M3 14h.01M3 21h.01" /></svg></span>
         <div>
           <h1>Transfer dashboard</h1>
           <p>Import IWTS PDFs, review the records, and follow every transfer in one shared register.</p>
@@ -52,7 +52,7 @@
     <!-- App -->
     <div id="dashboard-section" class="shell hidden">
       <header class="app-topbar">
-        <a class="brand" href="#/overview"><span class="logo" aria-hidden="true"></span>DCN FG</a>
+        <a class="brand" href="#/overview"><span class="logo" aria-hidden="true"><svg viewBox="0 0 28 28" focusable="false"><path d="M6 7h15M6 14h10M6 21h15M3 7h.01M3 14h.01M3 21h.01" /></svg></span>DCN FG</a>
         <div class="topbar-main">
           <span class="shell-context">Shared transfer register</span>
           <div class="sidebar-footer">
@@ -124,7 +124,7 @@
             <p id="analytics-range-note" class="muted analytics-range-note" aria-live="polite">Showing all saved records.</p>
           </div>
 
-          <div class="kpi-grid">
+          <div class="kpi-grid" role="group" aria-label="Analytics summary">
             <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small id="analytics-total-note">All saved records</small></div>
             <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-ppm10-quantity">0</strong><small id="analytics-ppm10-share">0% of total</small></div>
             <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-ppm50-quantity">0</strong><small id="analytics-ppm50-share">0% of total</small></div>
@@ -233,10 +233,6 @@
               <div class="field"><span id="item-picker-label">Item</span><div id="item-picker" class="item-picker"></div><select id="item-filter" class="hidden" tabindex="-1" aria-hidden="true"></select></div>
               <label class="field">Sort by<select id="sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
               <button id="clear-filters-button" type="button" class="text-button">Clear filters</button>
-            </div>
-            <div class="filter-sharing">
-              <button id="share-filter-button" type="button" class="secondary">Copy filter link</button>
-              <input id="share-filter-url" type="url" aria-label="Shareable filter URL" readonly />
             </div>
             <div class="records-summary" aria-live="polite"><span>Total quantity</span><strong id="records-total-quantity">0</strong><small id="records-quantity-note"></small></div>
             <p id="records-duplicate-warning" class="duplicate-warning hidden" role="alert"></p>

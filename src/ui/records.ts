@@ -7,12 +7,11 @@ import { fetchAllRecords, fetchRecords } from "../api";
 import { buildItemPicker, fillItems } from "./itemPicker";
 import { openDrawer } from "./drawer";
 import { exportToExcel, type ExportContext } from "./exportExcel";
-import { parseRecordFilters, serializeRecordFilters } from "../recordFilterUrl";
+import { parseRecordFilters } from "../recordFilterUrl";
 import { message } from "./toast";
 
 const search = $<HTMLInputElement>("#search-input"), dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), sortFilter = $<HTMLSelectElement>("#sort-filter");
 const clearFilters = $<HTMLButtonElement>("#clear-filters-button"), refresh = $<HTMLButtonElement>("#refresh-button"), exportButton = $<HTMLButtonElement>("#export-button");
-const shareFilter = $<HTMLButtonElement>("#share-filter-button"), shareUrl = $<HTMLInputElement>("#share-filter-url");
 const recordsTable = $<HTMLTableElement>("#records-table"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody");
 const recordsDescription = $<HTMLElement>("#records-description"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const pageInfo = $<HTMLElement>("#page-info"), pageSizeSelect = $<HTMLSelectElement>("#page-size"), pagePrev = $<HTMLButtonElement>("#page-prev"), pageNext = $<HTMLButtonElement>("#page-next"), pagination = $<HTMLElement>("#records-pagination");
@@ -187,14 +186,6 @@ export function initRecords() {
   pagePrev.addEventListener("click", () => { if (page > 0) { page--; void loadRecords(); recordsTable.scrollIntoView({ block: "start" }); } });
   pageNext.addEventListener("click", () => { page++; void loadRecords(); recordsTable.scrollIntoView({ block: "start" }); });
   pageSizeSelect.addEventListener("change", () => { pageSize = Number(pageSizeSelect.value) || 50; reloadFromStart(); });
-  shareFilter.addEventListener("click", async () => {
-    const query = serializeRecordFilters(filters());
-    const url = `${location.origin}${location.pathname}#/records${query ? `?${query}` : ""}`;
-    shareUrl.value = url;
-    try { await navigator.clipboard.writeText(url); message("Filter link copied.", "success"); }
-    catch { shareUrl.focus(); shareUrl.select(); message("Filter link is ready to copy from the field.", ""); }
-  });
-
   exportButton.addEventListener("click", async () => {
     if (!result.totalRecords) return;
     exportButton.disabled = true;
