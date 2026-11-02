@@ -13,6 +13,10 @@ export const GROUP_PREFIX = "group:";
 export const GROUP_OF = new Map<string, string>(ITEM_GROUPS.flatMap(({ group, items }) => items.map(([code]) => [code, group] as [string, string])));
 export const GROUP_CLASS: Record<string, string> = { "10 PPM": "ppm-10", "50 PPM": "ppm-50" };
 
+export function groupForItemCode(itemCode: string) {
+  return GROUP_OF.get(itemCode.trim());
+}
+
 /** Item codes a filter value stands for, or null when no item filter is set. */
 export function itemCodesFor(filter: string): string[] | null {
   if (!filter) return null;

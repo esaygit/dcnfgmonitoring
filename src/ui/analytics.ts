@@ -1,5 +1,5 @@
 import { $, emptyRow } from "../dom";
-import { GROUP_CLASS, GROUP_OF, ITEM_GROUPS } from "../constants";
+import { GROUP_CLASS, groupForItemCode, ITEM_GROUPS } from "../constants";
 import { fetchStats } from "../api";
 import type { DashboardStats } from "../types";
 import { displayDate, fmt, normalizedDate, pct } from "../utils";
@@ -38,8 +38,12 @@ function render(stats: DashboardStats) {
   $<HTMLElement>("#analytics-total-quantity").textContent = totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
   $<HTMLElement>("#analytics-largest-item").textContent = largest ? largest.itemCode : "—";
   $<HTMLElement>("#analytics-largest-desc").textContent = largest ? `${largest.description || "No description"} · ${fmt(largest.quantity)}` : "\u00a0";
-  const quantities = new Map(items.map((item) => [item.itemCode, item.quantity] as [string, number]));
-  const groupTotal = (group: string) => items.reduce((sum, item) => GROUP_OF.get(item.itemCode) === group ? sum + item.quantity : sum, 0);
+  const quantities = new Map<string, number>();
+  for (const item of items) {
+    const code = item.itemCode.trim();
+    quantities.set(code, (quantities.get(code) ?? 0) + item.quantity);
+  }
+  const groupTotal = (group: string) => items.reduce((sum, item) => groupForItemCode(item.itemCode) === group ? sum + item.quantity : sum, 0);
   const ppm10 = groupTotal("10 PPM"), ppm50 = groupTotal("50 PPM");
   $<HTMLElement>("#analytics-ppm10-quantity").textContent = fmt(ppm10);
   $<HTMLElement>("#analytics-ppm50-quantity").textContent = fmt(ppm50);
@@ -47,7 +51,7 @@ function render(stats: DashboardStats) {
   $<HTMLElement>("#analytics-ppm50-share").textContent = `${pct(ppm50, totalQuantity)} of total`;
 
   // Explain any difference between the total and the two PPM groups.
-  const other = items.filter((item) => !GROUP_OF.has(item.itemCode));
+  const other = items.filter((item) => !groupForItemCode(item.itemCode));
   const otherQuantity = round2(other.reduce((sum, item) => sum + item.quantity, 0));
   const reconcile = $<HTMLElement>("#analytics-reconcile");
   const unexplained = otherQuantity > 0 || noCodeQuantity > 0;
@@ -77,7 +81,7 @@ function render(stats: DashboardStats) {
     label.append(name, description);
     const track = document.createElement("div"), bar = document.createElement("span");
     track.className = "analytics-bar-track"; track.setAttribute("role", "img"); track.setAttribute("aria-label", `${item.itemCode}: ${item.quantity.toLocaleString()} total quantity`);
-    bar.className = `analytics-bar ${GROUP_CLASS[GROUP_OF.get(item.itemCode) ?? ""] ?? ""}`;
+    bar.className = `analytics-bar ${GROUP_CLASS[groupForItemCode(item.itemCode) ?? ""] ?? ""}`;
     bar.style.width = `${maximum > 0 ? item.quantity / maximum * 100 : 0}%`;
     track.append(bar);
     const value = document.createElement("strong");
