@@ -548,7 +548,7 @@ th + th, td + td { border-left-color: transparent; }
   .analytics-filters { padding: 16px; }
   .analytics-filters .field { min-width: min(140px, 42vw); }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filters .text-button { justify-self: start; }
+  .filters-sort-group { grid-column: 1 / -1; }
   .records-summary { position: static; }
   .overview-head { align-items: flex-start; }
   .overview-action { min-height: 40px; }
@@ -741,6 +741,9 @@ body { background: var(--ground); }
 .chip[aria-pressed="true"], .chip.active { background: var(--accent-wash); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-soft); }
 .filters { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; }
 .filters > * { min-width: 0; }
+.filters-sort-group { display: flex; align-items: end; gap: 8px; min-width: 0; }
+.filters-sort-group .field { flex: 1; min-width: 0; }
+.filters-sort-group .text-button { flex: none; min-height: 36px; padding: 4px; white-space: nowrap; }
 .field { gap: 6px; color: var(--ink); font-size: 0.82rem; font-weight: 600; }
 input[type="email"], input[type="password"], input[type="search"],
 .field input[type="date"], .field input[type="text"], select {
@@ -947,7 +950,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .analytics-filters .field { min-width: min(130px, 40vw); }
   .chips { flex-basis: 100%; }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .filters .text-button { justify-self: start; }
+  .filters-sort-group { grid-column: 1 / -1; }
   .toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
   .toolbar > * { width: auto; }
   .toolbar .search-label, .toolbar #export-button { grid-column: 1 / -1; width: 100%; max-width: none; }
