@@ -14,7 +14,7 @@ export const GROUP_OF = new Map<string, string>(ITEM_GROUPS.flatMap(({ group, it
 export const GROUP_CLASS: Record<string, string> = { "10 PPM": "ppm-10", "50 PPM": "ppm-50" };
 
 export function groupForItemCode(itemCode: string) {
-  return GROUP_OF.get(itemCode.trim());
+  return GROUP_OF.get(itemCode.replace(/[\s\u200B-\u200D\uFEFF]/g, ""));
 }
 
 /** Item codes a filter value stands for, or null when no item filter is set. */

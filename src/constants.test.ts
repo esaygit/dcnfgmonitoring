@@ -7,6 +7,10 @@ describe("groupForItemCode", () => {
     expect(groupForItemCode("4554770147")).toBe("10 PPM");
   });
 
+  it("recognizes item codes containing invisible formatting characters", () => {
+    expect(groupForItemCode("4554770\u200B147")).toBe("10 PPM");
+  });
+
   it("returns no group for item codes outside the configured lists", () => {
     expect(groupForItemCode("4554770999")).toBeUndefined();
   });
