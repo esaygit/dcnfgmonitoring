@@ -3,6 +3,7 @@ import { GROUP_CLASS, groupForItemCode, ITEM_GROUPS } from "../constants";
 import { fetchStats } from "../api";
 import type { DashboardStats } from "../types";
 import { displayDate, fmt, normalizedDate, pct } from "../utils";
+import { countTo, whole } from "./motion";
 import { message } from "./toast";
 
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
@@ -34,8 +35,8 @@ function render(stats: DashboardStats) {
   const totalQuantity = stats.quantity; // every saved row, so this always matches the Overview total
   const noCodeQuantity = round2(Math.max(0, totalQuantity - itemsQuantity)); // rows saved without an item code
   const largest = items[0];
-  $<HTMLElement>("#analytics-item-count").textContent = String(items.length);
-  $<HTMLElement>("#analytics-total-quantity").textContent = totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  countTo($<HTMLElement>("#analytics-item-count"), items.length, whole);
+  countTo($<HTMLElement>("#analytics-total-quantity"), totalQuantity);
   $<HTMLElement>("#analytics-largest-item").textContent = largest ? largest.itemCode : "—";
   $<HTMLElement>("#analytics-largest-desc").textContent = largest ? `${largest.description || "No description"} · ${fmt(largest.quantity)}` : "\u00a0";
   const quantities = new Map<string, number>();
@@ -45,8 +46,8 @@ function render(stats: DashboardStats) {
   }
   const groupTotal = (group: string) => items.reduce((sum, item) => groupForItemCode(item.itemCode) === group ? sum + item.quantity : sum, 0);
   const ppm10 = groupTotal("10 PPM"), ppm50 = groupTotal("50 PPM");
-  $<HTMLElement>("#analytics-ppm10-quantity").textContent = fmt(ppm10);
-  $<HTMLElement>("#analytics-ppm50-quantity").textContent = fmt(ppm50);
+  countTo($<HTMLElement>("#analytics-ppm10-quantity"), ppm10);
+  countTo($<HTMLElement>("#analytics-ppm50-quantity"), ppm50);
   $<HTMLElement>("#analytics-ppm10-share").textContent = `${pct(ppm10, totalQuantity)} of total`;
   $<HTMLElement>("#analytics-ppm50-share").textContent = `${pct(ppm50, totalQuantity)} of total`;
 

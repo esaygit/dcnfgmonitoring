@@ -2,6 +2,7 @@ import { $, emptyRow } from "../dom";
 import { fetchRecords, fetchStats } from "../api";
 import { groupTransfers, stackLines } from "../grouping";
 import { displayDate, fmt } from "../utils";
+import { countTo, whole } from "./motion";
 import { message } from "./toast";
 
 const recentBody = $<HTMLTableSectionElement>("#recent-table tbody");
@@ -12,10 +13,10 @@ export async function loadOverview() {
       fetchStats(null, null),
       fetchRecords({ query: "", dateFrom: "", dateTo: "", batch: "", item: "", sort: "date-desc" }, 0, 6),
     ]);
-    $<HTMLElement>("#total-records").textContent = stats.records.toLocaleString();
-    $<HTMLElement>("#total-quantity").textContent = stats.quantity.toLocaleString();
-    $<HTMLElement>("#total-references").textContent = stats.references.toLocaleString();
-    $<HTMLElement>("#total-destinations").textContent = stats.destinations.toLocaleString();
+    countTo($<HTMLElement>("#total-records"), stats.records, whole);
+    countTo($<HTMLElement>("#total-quantity"), stats.quantity);
+    countTo($<HTMLElement>("#total-references"), stats.references, whole);
+    countTo($<HTMLElement>("#total-destinations"), stats.destinations, whole);
 
     recentBody.innerHTML = "";
     const labels = ["Reference", "Date", "From", "To", "Description", "Quantity"];

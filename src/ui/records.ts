@@ -15,6 +15,7 @@ const clearFilters = $<HTMLButtonElement>("#clear-filters-button"), refresh = $<
 const recordsTable = $<HTMLTableElement>("#records-table"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody");
 const recordsDescription = $<HTMLElement>("#records-description"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const pageInfo = $<HTMLElement>("#page-info"), pageSizeSelect = $<HTMLSelectElement>("#page-size"), pagePrev = $<HTMLButtonElement>("#page-prev"), pageNext = $<HTMLButtonElement>("#page-next"), pagination = $<HTMLElement>("#records-pagination");
+const summaryEl = $<HTMLElement>(".records-summary");
 
 const RECORD_HEADERS = HEADERS;
 const HIDDEN_KEY = "dcn.hiddenColumns";
@@ -23,6 +24,12 @@ let page = 0, pageSize = Number(pageSizeSelect.value) || 50, requestId = 0;
 let result: RecordsPage = { rows: [], totalGroups: 0, totalRecords: 0, totalQuantity: 0 };
 let hidden = loadHidden();
 let syncItemPicker: () => void = () => {};
+
+/** Dims the table and shows a progress line on the summary bar while a request is in flight. */
+function setLoading(on: boolean) {
+  summaryEl.classList.toggle("is-loading", on);
+  recordsTable.classList.toggle("is-loading", on);
+}
 
 function loadHidden() {
   try {
@@ -52,6 +59,7 @@ export function describeFilters(): ExportContext {
 
 export async function loadRecords() {
   const id = ++requestId;
+  setLoading(true);
   recordsDescription.textContent = "Loading records…";
   try {
     let next = await fetchRecords(filters(), page, pageSize);
@@ -66,12 +74,14 @@ export async function loadRecords() {
     render();
   } catch (error) {
     if (id !== requestId) return;
+    setLoading(false);
     recordsDescription.textContent = "Could not load records.";
     message(`Could not load records: ${error instanceof Error ? error.message : "unexpected error"}`, "error");
   }
 }
 
 function render() {
+  setLoading(false);
   syncItemPicker();
   const f = filters(), plural = (n: number) => (n === 1 ? "" : "s");
   recordsDescription.textContent = `${result.totalRecords.toLocaleString()} record${plural(result.totalRecords)} in ${result.totalGroups.toLocaleString()} transaction${plural(result.totalGroups)}`;

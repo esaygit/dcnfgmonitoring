@@ -1,6 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import "./style.css";
 import "./polish.css";
+import "./premium.css";
 import { supabase } from "./api";
 import { $ } from "./dom";
 import { debounce } from "./utils";
@@ -12,7 +13,7 @@ import { loadOverview } from "./ui/overview";
 import { initAnalytics, loadAnalytics } from "./ui/analytics";
 import { initImport } from "./ui/importPage";
 
-const authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email");
+const authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email"), userAvatar = $<HTMLElement>("#user-avatar");
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
 
 // ---- Data ----
@@ -44,6 +45,7 @@ function showSession(next: Session | null) {
   dashboard.classList.toggle("hidden", !signedIn);
   userPanel.classList.toggle("hidden", !signedIn);
   userEmail.textContent = next?.user.email ?? "";
+  userAvatar.textContent = (next?.user.email ?? "").charAt(0).toUpperCase();
   const userId = next?.user.id;
   if (userId !== signedInUser) { // token refreshes also fire auth events; only reload when the user actually changes
     signedInUser = userId;
