@@ -7,21 +7,17 @@ import { fetchAllRecords, fetchRecords } from "../api";
 import { buildItemPicker, fillItems } from "./itemPicker";
 import { openDrawer } from "./drawer";
 import { exportToExcel, type ExportContext } from "./exportExcel";
-import { recordsToCsv } from "../csv";
 import { parseRecordFilters, serializeRecordFilters } from "../recordFilterUrl";
 import { message } from "./toast";
 
 const search = $<HTMLInputElement>("#search-input"), dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), sortFilter = $<HTMLSelectElement>("#sort-filter");
-const fromWarehouse = $<HTMLInputElement>("#from-warehouse-filter"), toWarehouse = $<HTMLInputElement>("#to-warehouse-filter"), palletFilter = $<HTMLInputElement>("#pallet-filter");
 const clearFilters = $<HTMLButtonElement>("#clear-filters-button"), refresh = $<HTMLButtonElement>("#refresh-button"), exportButton = $<HTMLButtonElement>("#export-button");
-const exportCsvPage = $<HTMLButtonElement>("#export-csv-page"), exportCsvAll = $<HTMLButtonElement>("#export-csv-all");
-const presetSelect = $<HTMLSelectElement>("#filter-preset"), presetName = $<HTMLInputElement>("#filter-preset-name"), savePreset = $<HTMLButtonElement>("#save-filter-preset");
 const shareFilter = $<HTMLButtonElement>("#share-filter-button"), shareUrl = $<HTMLInputElement>("#share-filter-url");
 const recordsTable = $<HTMLTableElement>("#records-table"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody");
 const recordsDescription = $<HTMLElement>("#records-description"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const pageInfo = $<HTMLElement>("#page-info"), pageSizeSelect = $<HTMLSelectElement>("#page-size"), pagePrev = $<HTMLButtonElement>("#page-prev"), pageNext = $<HTMLButtonElement>("#page-next"), pagination = $<HTMLElement>("#records-pagination");
 
-const RECORD_HEADERS = [...HEADERS, "Document Time"] as const;
+const RECORD_HEADERS = HEADERS;
 const HIDDEN_KEY = "dcn.hiddenColumns";
 const LOCKED = new Set<number>([0]); // the reference column cannot be hidden
 let page = 0, pageSize = Number(pageSizeSelect.value) || 50, requestId = 0;
@@ -38,9 +34,9 @@ function loadHidden() {
 function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* storage unavailable */ } }
 
 function filters(): RecordFilters {
-  return { query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value, sort: sortFilter.value as SortMode, fromWarehouse: fromWarehouse.value, toWarehouse: toWarehouse.value, pallet: palletFilter.value };
+  return { query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value, sort: sortFilter.value as SortMode };
 }
-const isFiltered = (f: RecordFilters) => Boolean(f.query.trim() || f.dateFrom || f.dateTo || f.batch.trim() || f.item || f.fromWarehouse?.trim() || f.toWarehouse?.trim() || f.pallet?.trim());
+const isFiltered = (f: RecordFilters) => Boolean(f.query.trim() || f.dateFrom || f.dateTo || f.batch.trim() || f.item);
 
 /** Text and values describing the current filters, used by the Excel export. */
 export function describeFilters(): ExportContext {
@@ -51,9 +47,6 @@ export function describeFilters(): ExportContext {
     to ? `Date to ${displayDate(to)}` : "",
     f.item ? `Item ${itemFilterName(f.item)}` : "",
     f.batch.trim() ? `Batch code contains "${f.batch.trim()}"` : "",
-    f.fromWarehouse?.trim() ? `From warehouse contains "${f.fromWarehouse.trim()}"` : "",
-    f.toWarehouse?.trim() ? `To warehouse contains "${f.toWarehouse.trim()}"` : "",
-    f.pallet?.trim() ? `Pallet ${f.pallet.trim()}` : "",
   ].filter(Boolean);
   return { text: parts.length ? parts.join("; ") : "none (all records)", from, to, batch: f.batch.trim() };
 }
@@ -113,7 +106,7 @@ function render() {
         body.append(line);
       });
     };
-    const values = [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))]), first.document_time?.slice(0, 5) ?? ""];
+    const values = [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])];
     values.forEach((value, index) => {
       const td = document.createElement("td"), body = document.createElement("div");
       td.dataset.label = RECORD_HEADERS[index]; body.className = "cell-body";
@@ -143,16 +136,6 @@ function render() {
 
   exportButton.disabled = !result.totalRecords;
   exportButton.title = result.totalRecords ? `Download all ${result.totalRecords.toLocaleString()} record${plural(result.totalRecords)} matching the current search and filters as an Excel workbook` : "No records to download";
-  exportCsvPage.disabled = !result.rows.length;
-  exportCsvAll.disabled = !result.totalRecords;
-}
-
-function downloadCsv(list: typeof result.rows, scope: "page" | "all") {
-  const blob = new Blob(["\ufeff", recordsToCsv(list)], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob), link = document.createElement("a");
-  link.href = url; link.download = `dcn-fg-records-${scope}-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function buildColumnPicker() {
@@ -186,7 +169,6 @@ export function initRecords() {
     const shared = parseRecordFilters(hashQuery);
     search.value = shared.query ?? ""; dateFrom.value = shared.dateFrom ?? ""; dateTo.value = shared.dateTo ?? "";
     batchFilter.value = shared.batch ?? ""; itemFilter.value = shared.item ?? ""; sortFilter.value = shared.sort ?? "date-desc";
-    fromWarehouse.value = shared.fromWarehouse ?? ""; toWarehouse.value = shared.toWarehouse ?? ""; palletFilter.value = shared.pallet ?? "";
   }
   syncItemPicker = buildItemPicker(itemFilter);
   buildColumnPicker();
@@ -195,11 +177,9 @@ export function initRecords() {
   const reloadSoon = debounce(reloadFromStart, 300);
   search.addEventListener("input", reloadSoon);
   batchFilter.addEventListener("input", reloadSoon);
-  [fromWarehouse, toWarehouse, palletFilter].forEach((control) => control.addEventListener("input", reloadSoon));
   for (const control of [dateFrom, dateTo, itemFilter, sortFilter]) control.addEventListener("change", reloadFromStart);
   clearFilters.addEventListener("click", () => {
     dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; sortFilter.value = "date-desc"; search.value = "";
-    fromWarehouse.value = ""; toWarehouse.value = ""; palletFilter.value = "";
     syncItemPicker(); reloadFromStart();
   });
   refresh.addEventListener("click", () => void loadRecords());
@@ -207,27 +187,6 @@ export function initRecords() {
   pagePrev.addEventListener("click", () => { if (page > 0) { page--; void loadRecords(); recordsTable.scrollIntoView({ block: "start" }); } });
   pageNext.addEventListener("click", () => { page++; void loadRecords(); recordsTable.scrollIntoView({ block: "start" }); });
   pageSizeSelect.addEventListener("change", () => { pageSize = Number(pageSizeSelect.value) || 50; reloadFromStart(); });
-  presetSelect.addEventListener("change", () => {
-    const selected = presetSelect.selectedOptions[0];
-    if (!selected?.dataset.filters) return;
-    const saved = parseRecordFilters(selected.dataset.filters);
-    search.value = saved.query ?? ""; dateFrom.value = saved.dateFrom ?? ""; dateTo.value = saved.dateTo ?? "";
-    batchFilter.value = saved.batch ?? ""; itemFilter.value = saved.item ?? ""; sortFilter.value = saved.sort ?? "date-desc";
-    fromWarehouse.value = saved.fromWarehouse ?? ""; toWarehouse.value = saved.toWarehouse ?? ""; palletFilter.value = saved.pallet ?? "";
-    syncItemPicker(); reloadFromStart();
-  });
-  savePreset.addEventListener("click", () => {
-    const name = presetName.value.trim();
-    if (!name) { message("Enter a name for this filter preset.", "error"); presetName.focus(); return; }
-    try {
-      const saved = JSON.parse(localStorage.getItem("dcn.recordFilterPresets") ?? "{}") as Record<string, string>;
-      saved[name] = serializeRecordFilters(filters());
-      localStorage.setItem("dcn.recordFilterPresets", JSON.stringify(saved));
-      presetSelect.replaceChildren(new Option("Saved presets", ""));
-      Object.entries(saved).forEach(([label, query]) => { const option = new Option(label, label); option.dataset.filters = query; presetSelect.append(option); });
-      presetSelect.value = name; message(`Saved filter preset "${name}".`, "success");
-    } catch (error) { message(`Could not save filter preset: ${error instanceof Error ? error.message : "storage unavailable"}`, "error"); }
-  });
   shareFilter.addEventListener("click", async () => {
     const query = serializeRecordFilters(filters());
     const url = `${location.origin}${location.pathname}#/records${query ? `?${query}` : ""}`;
@@ -235,10 +194,6 @@ export function initRecords() {
     try { await navigator.clipboard.writeText(url); message("Filter link copied.", "success"); }
     catch { shareUrl.focus(); shareUrl.select(); message("Filter link is ready to copy from the field.", ""); }
   });
-  try {
-    const saved = JSON.parse(localStorage.getItem("dcn.recordFilterPresets") ?? "{}") as Record<string, string>;
-    Object.entries(saved).forEach(([label, query]) => { const option = new Option(label, label); option.dataset.filters = query; presetSelect.append(option); });
-  } catch (error) { message(`Could not load filter presets: ${error instanceof Error ? error.message : "invalid saved data"}`, "error"); }
 
   exportButton.addEventListener("click", async () => {
     if (!result.totalRecords) return;
@@ -251,26 +206,6 @@ export function initRecords() {
       message(`Could not export: ${error instanceof Error ? error.message : "unexpected error"}`, "error");
     } finally {
       exportButton.disabled = !result.totalRecords;
-    }
-  });
-
-  exportCsvPage.addEventListener("click", () => {
-    if (!result.rows.length) return;
-    downloadCsv(result.rows, "page");
-    message(`Exported ${result.rows.length} records from this page as CSV.`, "success");
-  });
-  exportCsvAll.addEventListener("click", async () => {
-    if (!result.totalRecords) return;
-    exportCsvAll.disabled = true;
-    message("Collecting records for CSV…", "", 0);
-    try {
-      const list = await fetchAllRecords(filters(), (done, total) => message(`Collecting records for CSV… ${done.toLocaleString()} of ${total.toLocaleString()} transactions`, "", 0));
-      downloadCsv(list, "all");
-      message(`Exported ${list.length} records as CSV.`, "success");
-    } catch (error) {
-      message(`Could not export CSV: ${error instanceof Error ? error.message : "unexpected error"}`, "error");
-    } finally {
-      exportCsvAll.disabled = !result.totalRecords;
     }
   });
 }

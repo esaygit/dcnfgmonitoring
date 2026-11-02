@@ -9,9 +9,6 @@ const filters: RecordFilters = {
   batch: "B 1",
   item: "",
   sort: "date-desc",
-  fromWarehouse: "W01",
-  toWarehouse: "",
-  pallet: "1001",
 };
 
 describe("record filter URLs", () => {
@@ -21,5 +18,16 @@ describe("record filter URLs", () => {
 
   it("falls back to a safe sort mode for an invalid URL value", () => {
     expect(parseRecordFilters("sort=unexpected").sort).toBe("date-desc");
+  });
+
+  it("ignores removed warehouse and pallet filters in old shared URLs", () => {
+    expect(parseRecordFilters("fromWarehouse=W01&toWarehouse=W22&pallet=1001")).toEqual({
+      query: "",
+      dateFrom: "",
+      dateTo: "",
+      batch: "",
+      item: "",
+      sort: "date-desc",
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupForItemCode } from "./constants";
+import { canonicalItemCode, groupForItemCode } from "./constants";
 
 describe("groupForItemCode", () => {
   it("recognizes item codes with surrounding whitespace", () => {
@@ -13,5 +13,11 @@ describe("groupForItemCode", () => {
 
   it("returns no group for item codes outside the configured lists", () => {
     expect(groupForItemCode("4554770999")).toBeUndefined();
+  });
+});
+
+describe("canonicalItemCode", () => {
+  it("removes whitespace and invisible formatting characters", () => {
+    expect(canonicalItemCode(" 4554770\u200B147 ")).toBe("4554770147");
   });
 });

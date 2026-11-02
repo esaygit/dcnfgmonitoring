@@ -30,9 +30,6 @@ export type RecordFilters = {
   batch: string;
   item: string;
   sort: SortMode;
-  fromWarehouse?: string;
-  toWarehouse?: string;
-  pallet?: string;
 };
 
 /** One page of the Records table. Pages are made of whole transactions (all batches of a transaction stay together). */

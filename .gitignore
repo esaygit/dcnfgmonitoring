@@ -3,3 +3,4 @@ dist/
 *.xlsx_updated.xlsx
 .env.local
 README.MD
+supabase/

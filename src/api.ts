@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { itemCodesFor } from "./constants";
-import type { DashboardStats, DuplicateProbe, NewTransfer, RecordFilters, RecordsPage, Transfer } from "./types";
+import { canonicalItemCode, itemCodesFor } from "./constants";
+import type { DashboardStats, DuplicateProbe, ItemStat, NewTransfer, RecordFilters, RecordsPage, Transfer } from "./types";
 import { normalizedDate } from "./utils";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -30,13 +30,11 @@ type DashboardStatsResponse = {
 } | null;
 
 export function mapDashboardStats(stats: DashboardStatsResponse): DashboardStats {
-  return {
-    records: Number(stats?.records ?? 0),
-    quantity: Number(stats?.quantity ?? 0),
-    references: Number(stats?.references ?? 0),
-    destinations: Number(stats?.destinations ?? 0),
-    items: (stats?.items ?? []).map((item) => ({
-      itemCode: item.item_code,
+  const items = new Map<string, ItemStat>();
+  for (const item of stats?.items ?? []) {
+    const itemCode = canonicalItemCode(item.item_code);
+    const next: ItemStat = {
+      itemCode,
       description: item.description ?? "",
       transactions: Number(item.transactions ?? 0),
       quantity: Number(item.quantity ?? 0),
@@ -44,7 +42,26 @@ export function mapDashboardStats(stats: DashboardStatsResponse): DashboardStats
       pallets: Number(item.pallets ?? 0),
       destinations: Number(item.destinations ?? 0),
       latestDate: item.latest_date ?? "",
-    })),
+    };
+    const current = items.get(itemCode);
+    if (current) {
+      current.description ||= next.description;
+      current.transactions += next.transactions;
+      current.quantity += next.quantity;
+      current.batches += next.batches;
+      current.pallets += next.pallets;
+      current.destinations += next.destinations;
+      current.latestDate = current.latestDate > next.latestDate ? current.latestDate : next.latestDate;
+    } else {
+      items.set(itemCode, next);
+    }
+  }
+  return {
+    records: Number(stats?.records ?? 0),
+    quantity: Number(stats?.quantity ?? 0),
+    references: Number(stats?.references ?? 0),
+    destinations: Number(stats?.destinations ?? 0),
+    items: [...items.values()],
   };
 }
 
@@ -59,9 +76,9 @@ export async function fetchRecords(filters: RecordFilters, page: number, pageSiz
     p_sort: filters.sort,
     p_limit: pageSize,
     p_offset: page * pageSize,
-    p_from_warehouse: filters.fromWarehouse?.trim() ?? "",
-    p_to_warehouse: filters.toWarehouse?.trim() ?? "",
-    p_pallet: filters.pallet?.trim() ?? "",
+    p_from_warehouse: "",
+    p_to_warehouse: "",
+    p_pallet: "",
   });
   if (error) throw new Error(error.message);
   const result = data as { rows?: Transfer[]; total_groups?: number; total_records?: number; total_quantity?: number } | null;

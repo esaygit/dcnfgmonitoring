@@ -11,9 +11,6 @@ export function serializeRecordFilters(filters: RecordFilters) {
     batch: filters.batch,
     item: filters.item,
     sort: filters.sort,
-    fromWarehouse: filters.fromWarehouse ?? "",
-    toWarehouse: filters.toWarehouse ?? "",
-    pallet: filters.pallet ?? "",
   };
   Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
   return params.toString();
@@ -30,8 +27,5 @@ export function parseRecordFilters(search: string): Partial<RecordFilters> {
     batch: params.get("batch") ?? "",
     item: params.get("item") ?? "",
     sort: sortMode,
-    fromWarehouse: params.get("fromWarehouse") ?? "",
-    toWarehouse: params.get("toWarehouse") ?? "",
-    pallet: params.get("pallet") ?? "",
   };
 }

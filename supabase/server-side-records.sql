@@ -128,9 +128,14 @@ create or replace function public.dashboard_stats(
 language sql stable
 as $$
   with f as (
-    select * from public.transfers
-    where (p_from is null or document_date >= p_from)
-      and (p_to is null or document_date <= p_to)
+    select t.*,
+           upper(regexp_replace(
+             translate(coalesce(t.item_code, ''), U&'\200B\200C\200D\FEFF', ''),
+             '[[:space:]]+', '', 'g'
+           )) as item_code_key
+    from public.transfers t
+    where (p_from is null or t.document_date >= p_from)
+      and (p_to is null or t.document_date <= p_to)
   ),
   totals as (
     select count(*) as records,
@@ -140,13 +145,13 @@ as $$
     from f
   ),
   pallet_counts as (
-    select f.item_code, count(distinct u.pallet) as pallets
+    select f.item_code_key, count(distinct u.pallet) as pallets
     from f cross join lateral unnest(f.pallets) as u(pallet)
     where btrim(u.pallet) <> ''
-    group by f.item_code
+    group by f.item_code_key
   ),
   items as (
-    select f.item_code,
+    select f.item_code_key as item_code,
            max(f.description) as description,
            count(distinct f.transaction_reference) as transactions,
            coalesce(sum(f.quantity), 0) as quantity,
@@ -154,8 +159,8 @@ as $$
            count(distinct nullif(btrim(f.transferred_to), '')) as destinations,
            max(f.document_date) as latest_date
     from f
-    where btrim(coalesce(f.item_code, '')) <> ''
-    group by f.item_code
+    where f.item_code_key <> ''
+    group by f.item_code_key
   )
   select jsonb_build_object(
     'records', t.records,
@@ -173,7 +178,7 @@ as $$
                'destinations', i.destinations,
                'latest_date', i.latest_date
              ) order by i.quantity desc, i.item_code)
-      from items i left join pallet_counts pc on pc.item_code = i.item_code
+      from items i left join pallet_counts pc on pc.item_code_key = i.item_code
     ), '[]'::jsonb)
   )
   from totals t
