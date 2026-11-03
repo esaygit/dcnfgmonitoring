@@ -37,7 +37,7 @@ function buildDetails(members: Transfer[]) {
   if (members.some((transfer) => transfer.is_duplicate)) {
     const warning = document.createElement("p");
     warning.className = "duplicate-warning";
-    warning.textContent = "A batch in this transaction matches another saved record (same batch code, quantity and pallet).";
+    warning.textContent = "A batch in this transaction matches another saved record (same quantity and pallet number).";
     wrap.append(warning);
   }
 
