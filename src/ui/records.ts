@@ -210,3 +210,27 @@ export function initRecords() {
     }
   });
 }
+
+export function applyRecordFiltersFromUrl(searchParams: string) {
+  const shared = parseRecordFilters(searchParams);
+  const next = {
+    query: shared.query ?? "",
+    dateFrom: shared.dateFrom ?? "",
+    dateTo: shared.dateTo ?? "",
+    batch: shared.batch ?? "",
+    item: shared.item ?? "",
+    sort: shared.sort ?? "date-desc",
+  };
+  const changed = search.value !== next.query || dateFrom.value !== next.dateFrom || dateTo.value !== next.dateTo ||
+    batchFilter.value !== next.batch || itemFilter.value !== next.item || sortFilter.value !== next.sort;
+  if (!changed) return;
+  search.value = next.query;
+  dateFrom.value = next.dateFrom;
+  dateTo.value = next.dateTo;
+  batchFilter.value = next.batch;
+  itemFilter.value = next.item;
+  sortFilter.value = next.sort;
+  syncItemPicker();
+  page = 0;
+  void loadRecords();
+}

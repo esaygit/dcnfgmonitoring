@@ -1,5 +1,5 @@
 import { $ } from "../dom";
-import { GROUP_PREFIX, ITEM_GROUPS } from "../constants";
+import { GROUP_PREFIX, ITEM_GROUPS, ITEM_SEGMENTS } from "../constants";
 
 /** Fills the hidden <select> that holds the item filter value. */
 export function fillItems(select: HTMLSelectElement, showCode = true) {
@@ -9,6 +9,9 @@ export function fillItems(select: HTMLSelectElement, showCode = true) {
     const optgroup = document.createElement("optgroup");
     optgroup.label = group;
     optgroup.append(new Option(`All ${group}`, GROUP_PREFIX + group));
+    for (const segment of ITEM_SEGMENTS.filter((entry) => entry.group === group)) {
+      optgroup.append(new Option(`${segment.label} — ${segment.codes.length} items`, `${GROUP_PREFIX}${group}:${segment.segment}`));
+    }
     for (const [code, name] of items) optgroup.append(new Option(showCode ? `${name} — ${code}` : name, code));
     select.append(optgroup);
   }
@@ -17,10 +20,13 @@ export function fillItems(select: HTMLSelectElement, showCode = true) {
 /** Custom item dropdown so the PPM group headings are clickable (the <select> stays as the hidden source of truth). */
 export function buildItemPicker(itemFilter: HTMLSelectElement) {
   const host = $<HTMLElement>("#item-picker");
-  type Choice = { value: string; label: string; hint: string; kind: "all" | "group" | "item" };
+  type Choice = { value: string; label: string; hint: string; kind: "all" | "group" | "segment" | "item" };
   const choices: Choice[] = [{ value: "", label: "All items", hint: "", kind: "all" }];
   for (const { group, items } of ITEM_GROUPS) {
     choices.push({ value: GROUP_PREFIX + group, label: group, hint: `All ${items.length} items`, kind: "group" });
+    for (const segment of ITEM_SEGMENTS.filter((entry) => entry.group === group)) {
+      choices.push({ value: `${GROUP_PREFIX}${group}:${segment.segment}`, label: `${group} ${segment.label.toLowerCase()}`, hint: `${segment.codes.length} items`, kind: "segment" });
+    }
     for (const [code, name] of items) choices.push({ value: code, label: name, hint: code, kind: "item" });
   }
   const button = document.createElement("button"), buttonLabel = document.createElement("span"), caret = document.createElement("span"), menu = document.createElement("div");

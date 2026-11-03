@@ -1,10 +1,13 @@
 import { $, emptyRow } from "../dom";
 import { GROUP_CLASS, groupForItemCode, ITEM_GROUPS } from "../constants";
-import { fetchStats } from "../api";
+import { fetchAllRecords, fetchStats } from "../api";
 import type { DashboardStats } from "../types";
+import type { RecordFilters } from "../types";
+import { analyticsRecordsHref, comparisonRange } from "../analyticsModel";
 import { displayDate, fmt, normalizedDate, pct } from "../utils";
 import { countTo, whole } from "./motion";
 import { message } from "./toast";
+import { initAnalyticsViews, updateAnalyticsViews } from "./analyticsViews";
 
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
 const fromInput = $<HTMLInputElement>("#analytics-from"), toInput = $<HTMLInputElement>("#analytics-to"), rangeNote = $<HTMLElement>("#analytics-range-note"), totalNote = $<HTMLElement>("#analytics-total-note");
@@ -75,8 +78,9 @@ function render(stats: DashboardStats) {
   }
   const maximum = Math.max(...items.map((item) => item.quantity));
   for (const item of items) {
-    const chartRow = document.createElement("div");
+    const chartRow = document.createElement("a");
     chartRow.className = "analytics-bar-row";
+    chartRow.href = analyticsRecordsHref(normalizedDate(fromInput.value), normalizedDate(toInput.value), item.itemCode);
     const label = document.createElement("div"), name = document.createElement("strong"), description = document.createElement("span");
     label.className = "analytics-bar-label"; name.textContent = item.itemCode; description.textContent = item.description || "No description";
     label.append(name, description);
@@ -108,8 +112,20 @@ export async function loadAnalytics() {
   totalNote.textContent = period ? "Selected period" : "All saved records";
   if (from && to && from > to) { rangeNote.textContent = "The start date is after the end date."; return; }
   try {
-    const stats = await fetchStats(from || null, to || null);
-    if (id === requestId) render(stats);
+    const comparison = comparisonRange(from, to);
+    const filters = (dateFrom: string, dateTo: string): RecordFilters => ({
+      query: "", dateFrom, dateTo, batch: "", item: "", sort: "date-desc",
+    });
+    const [stats, records, previousStats, previousRecords] = await Promise.all([
+      fetchStats(from || null, to || null),
+      fetchAllRecords(filters(from, to)),
+      comparison ? fetchStats(comparison.from, comparison.to) : Promise.resolve(null),
+      comparison ? fetchAllRecords(filters(comparison.from, comparison.to)) : Promise.resolve([]),
+    ]);
+    if (id === requestId) {
+      render(stats);
+      updateAnalyticsViews(records, previousRecords, stats, previousStats, from, to);
+    }
   } catch (error) {
     if (id === requestId) message(`Could not load analytics: ${error instanceof Error ? error.message : "unexpected error"}`, "error");
   }
@@ -118,6 +134,7 @@ export async function loadAnalytics() {
 const isoLocal = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 export function initAnalytics() {
+  initAnalyticsViews();
   fromInput.addEventListener("change", () => void loadAnalytics());
   toInput.addEventListener("change", () => void loadAnalytics());
   document.querySelectorAll<HTMLButtonElement>("[data-range]").forEach((chip) => chip.addEventListener("click", () => {

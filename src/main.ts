@@ -8,7 +8,7 @@ import { debounce } from "./utils";
 import { message } from "./ui/toast";
 import { initTheme } from "./ui/theme";
 import { closeDrawer, initDrawer } from "./ui/drawer";
-import { initRecords, loadRecords } from "./ui/records";
+import { applyRecordFiltersFromUrl, initRecords, loadRecords } from "./ui/records";
 import { loadOverview } from "./ui/overview";
 import { initAnalytics, loadAnalytics } from "./ui/analytics";
 import { initImport } from "./ui/importPage";
@@ -27,6 +27,8 @@ const scheduleRefresh = debounce(() => void refreshAll(), 500);
 const PAGES = ["overview", "analytics", "import", "records"];
 function route() {
   const hash = location.hash.replace(/^#\//, "").split("?", 1)[0], name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
+  const searchParams = location.hash.split("?")[1];
+  if (current === "records" && searchParams !== undefined) applyRecordFiltersFromUrl(searchParams);
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));
   document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((link) => {
     const on = link.dataset.nav === current;

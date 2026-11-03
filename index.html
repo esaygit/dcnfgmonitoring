@@ -130,50 +130,124 @@
             <p id="analytics-range-note" class="muted analytics-range-note" aria-live="polite">Showing all saved records.</p>
           </div>
 
-          <div class="kpi-grid" role="group" aria-label="Analytics summary">
-            <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small id="analytics-total-note">All saved records</small></div>
-            <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-ppm10-quantity">0</strong><small id="analytics-ppm10-share">0% of total</small></div>
-            <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-ppm50-quantity">0</strong><small id="analytics-ppm50-share">0% of total</small></div>
-            <div class="kpi"><span>Item codes</span><strong id="analytics-item-count">0</strong><small>With saved records</small></div>
-            <div class="kpi kpi-wide"><span>Highest-volume item</span><strong id="analytics-largest-item">—</strong><small id="analytics-largest-desc">&nbsp;</small></div>
+          <div class="analytics-tabs" role="tablist" aria-label="Analytics views">
+            <button id="analytics-tab-trends" type="button" role="tab" aria-selected="true" aria-controls="analytics-panel-trends" data-analytics-tab="trends">Trends</button>
+            <button id="analytics-tab-mix" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-mix" data-analytics-tab="mix" tabindex="-1">Mix</button>
+            <button id="analytics-tab-quality" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-quality" data-analytics-tab="quality" tabindex="-1">Quality</button>
+            <button id="analytics-tab-items" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-items" data-analytics-tab="items" tabindex="-1">Items</button>
           </div>
 
-          <div class="donut-grid">
-            <div class="panel donut-panel">
-              <div class="section-heading">
-                <div><h2><span class="group-dot ppm-10"></span>10 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+          <section id="analytics-panel-trends" class="analytics-tab-panel" role="tabpanel" aria-labelledby="analytics-tab-trends" data-analytics-panel="trends">
+            <div class="kpi-grid analytics-trend-kpis" role="group" aria-label="Period totals">
+              <div class="kpi"><span>Total quantity</span><strong id="analytics-trend-total">0</strong><small id="analytics-trend-total-delta">No comparison</small></div>
+              <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-trend-ppm10">0</strong><small id="analytics-trend-ppm10-delta">No comparison</small></div>
+              <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-trend-ppm50">0</strong><small id="analytics-trend-ppm50-delta">No comparison</small></div>
+              <div class="kpi"><span>Records</span><strong id="analytics-trend-records">0</strong><small id="analytics-trend-records-delta">No comparison</small></div>
+            </div>
+
+            <div class="panel analytics-chart-panel">
+              <div class="section-heading analytics-chart-heading">
+                <div><h2>Quantity over time</h2><p id="analytics-trend-note" class="muted">Export and downgraded quantities for 50 PPM.</p></div>
+                <div class="analytics-controls">
+                  <div class="segmented-control" role="group" aria-label="Quality group">
+                    <button type="button" data-ppm="50 PPM" aria-pressed="true">50 PPM</button>
+                    <button type="button" data-ppm="10 PPM" aria-pressed="false">10 PPM</button>
+                  </div>
+                  <div class="segmented-control" role="group" aria-label="Time interval">
+                    <button type="button" data-interval="day" aria-pressed="true">Day</button>
+                    <button type="button" data-interval="week" aria-pressed="false">Week</button>
+                    <button type="button" data-interval="month" aria-pressed="false">Month</button>
+                  </div>
+                </div>
               </div>
-              <div id="analytics-donut-10" class="donut-card"></div>
+              <div id="analytics-trend-chart" class="analytics-svg-wrap"></div>
             </div>
-            <div class="panel donut-panel">
+
+            <div class="panel analytics-chart-panel">
               <div class="section-heading">
-                <div><h2><span class="group-dot ppm-50"></span>50 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+                <div><h2>Volume per period</h2><p class="muted">Stacked quantity by PPM group. Select a bar segment to see its records.</p></div>
               </div>
-              <div id="analytics-donut-50" class="donut-card"></div>
+              <div id="analytics-volume-chart" class="analytics-svg-wrap"></div>
             </div>
-          </div>
+          </section>
 
-          <p id="analytics-reconcile" class="duplicate-warning hidden"></p>
+          <section id="analytics-panel-mix" class="analytics-tab-panel hidden" role="tabpanel" aria-labelledby="analytics-tab-mix" data-analytics-panel="mix" hidden>
+            <div class="panel analytics-chart-panel">
+              <div class="section-heading">
+                <div><h2>Item mix over time</h2><p class="muted">Each period totals 100%, showing how volume shifts among the configured item codes.</p></div>
+              </div>
+              <div id="analytics-mix-chart" class="analytics-svg-wrap"></div>
+            </div>
+          </section>
 
-          <div class="panel">
-            <div class="section-heading">
-              <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity for the selected period.</p></div>
-              <div class="chart-key" aria-hidden="true"><span><i class="group-dot ppm-10"></i>10 PPM</span><span><i class="group-dot ppm-50"></i>50 PPM</span></div>
+          <section id="analytics-panel-quality" class="analytics-tab-panel hidden" role="tabpanel" aria-labelledby="analytics-tab-quality" data-analytics-panel="quality" hidden>
+            <div class="quality-grid">
+              <section class="panel quality-panel">
+                <div class="section-heading"><div><h2>Missing item code</h2><p class="muted">Saved records without an item code.</p></div></div>
+                <a id="analytics-missing-link" class="quality-count-link" href="#/records"><strong id="analytics-missing-count">0</strong><span>records in this date range</span></a>
+              </section>
+              <section class="panel quality-panel">
+                <div class="section-heading"><div><h2>Outside the PPM lists</h2><p class="muted">Item codes not in the configured 10 or 50 PPM groups.</p></div></div>
+                <div id="analytics-unlisted-list" class="quality-list"></div>
+              </section>
+              <section class="panel quality-panel quality-weekly">
+                <div class="section-heading"><div><h2>Possible duplicates by week</h2><p class="muted">Records already flagged by the register's duplicate check.</p></div></div>
+                <div class="table-wrap">
+                  <table id="analytics-duplicates-table">
+                    <thead><tr><th>Week starting</th><th class="num">Flagged records</th></tr></thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-            <div id="analytics-chart" class="analytics-chart"></div>
-          </div>
+          </section>
 
-          <div class="panel">
-            <div class="section-heading">
-              <div><h2>Item code details</h2><p class="muted">Record volume, quantities, inventory identifiers, destinations, and latest activity.</p></div>
+          <section id="analytics-panel-items" class="analytics-tab-panel hidden" role="tabpanel" aria-labelledby="analytics-tab-items" data-analytics-panel="items" hidden>
+            <div class="kpi-grid" role="group" aria-label="Item summary">
+              <div class="kpi kpi-accent"><span>Total quantity</span><strong id="analytics-total-quantity">0</strong><small id="analytics-total-note">All saved records</small></div>
+              <div class="kpi"><span>10 PPM quantity</span><strong id="analytics-ppm10-quantity">0</strong><small id="analytics-ppm10-share">0% of total</small></div>
+              <div class="kpi"><span>50 PPM quantity</span><strong id="analytics-ppm50-quantity">0</strong><small id="analytics-ppm50-share">0% of total</small></div>
+              <div class="kpi"><span>Item codes</span><strong id="analytics-item-count">0</strong><small>With saved records</small></div>
+              <div class="kpi kpi-wide"><span>Highest-volume item</span><strong id="analytics-largest-item">—</strong><small id="analytics-largest-desc">&nbsp;</small></div>
             </div>
-            <div class="table-wrap">
-              <table id="analytics-table">
-                <thead><tr><th>Item Code</th><th>Description</th><th class="num">Transactions</th><th class="num">Total Quantity</th><th class="num">Avg per Transaction</th><th class="num">Batches</th><th class="num">Pallets</th><th class="num">Destinations</th><th>Latest Transfer</th></tr></thead>
-                <tbody></tbody>
-              </table>
+
+            <div class="donut-grid">
+              <div class="panel donut-panel">
+                <div class="section-heading">
+                  <div><h2><span class="group-dot ppm-10"></span>10 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+                </div>
+                <div id="analytics-donut-10" class="donut-card"></div>
+              </div>
+              <div class="panel donut-panel">
+                <div class="section-heading">
+                  <div><h2><span class="group-dot ppm-50"></span>50 PPM</h2><p class="muted">Share of quantity by item code.</p></div>
+                </div>
+                <div id="analytics-donut-50" class="donut-card"></div>
+              </div>
             </div>
-          </div>
+
+            <p id="analytics-reconcile" class="duplicate-warning hidden"></p>
+
+            <div class="panel">
+              <div class="section-heading">
+                <div><h2>Quantity by item code</h2><p class="muted">Relative total quantity for the selected period.</p></div>
+                <div class="chart-key" aria-hidden="true"><span><i class="group-dot ppm-10"></i>10 PPM</span><span><i class="group-dot ppm-50"></i>50 PPM</span></div>
+              </div>
+              <div id="analytics-chart" class="analytics-chart"></div>
+            </div>
+
+            <div class="panel">
+              <div class="section-heading">
+                <div><h2>Item code details</h2><p class="muted">Record volume, quantities, inventory identifiers, destinations, and latest activity.</p></div>
+              </div>
+              <div class="table-wrap">
+                <table id="analytics-table">
+                  <thead><tr><th>Item Code</th><th>Description</th><th class="num">Transactions</th><th class="num">Total Quantity</th><th class="num">Avg per Transaction</th><th class="num">Batches</th><th class="num">Pallets</th><th class="num">Destinations</th><th>Latest Transfer</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         </section>
 
         <!-- Import -->

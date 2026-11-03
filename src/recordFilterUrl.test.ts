@@ -27,4 +27,12 @@ describe("record filter URLs", () => {
       sort: "date-desc",
     });
   });
+
+  it("preserves combined analytics series filters in chart links", () => {
+    expect(parseRecordFilters("from=2026-10-12&to=2026-10-18&item=group%3A50+PPM%3Aexports")).toMatchObject({
+      dateFrom: "2026-10-12",
+      dateTo: "2026-10-18",
+      item: "group:50 PPM:exports",
+    });
+  });
 });

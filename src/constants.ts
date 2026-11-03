@@ -7,6 +7,13 @@ export const ITEM_GROUPS: { group: string; items: [string, string][] }[] = [
   { group: "10 PPM", items: [["4554770148", "RF MR EXP 10PPM"], ["4554770147", "RF MR DG 10PPM"], ["4554770149", "RF X-XFINE EXP 10PPM"], ["4554770150", "RF X-XFINE DG 10PPM"]] },
 ];
 
+export const ITEM_SEGMENTS = [
+  { group: "50 PPM", segment: "exports", label: "Exports", codes: ["4554770121", "4554770136"] },
+  { group: "50 PPM", segment: "downgraded", label: "Downgraded", codes: ["4554770128", "4554770130"] },
+  { group: "10 PPM", segment: "exports", label: "Exports", codes: ["4554770148", "4554770149"] },
+  { group: "10 PPM", segment: "downgraded", label: "Downgraded", codes: ["4554770147", "4554770150"] },
+] as const;
+
 /** The item filter value is "", an item code, or "group:50 PPM" / "group:10 PPM". */
 export const GROUP_PREFIX = "group:";
 
@@ -25,13 +32,19 @@ export function groupForItemCode(itemCode: string) {
 export function itemCodesFor(filter: string): string[] | null {
   if (!filter) return null;
   if (filter.startsWith(GROUP_PREFIX)) {
-    return ITEM_GROUPS.find((entry) => entry.group === filter.slice(GROUP_PREFIX.length))?.items.map(([code]) => code) ?? [];
+    const [group, segment] = filter.slice(GROUP_PREFIX.length).split(":");
+    if (segment) return ITEM_SEGMENTS.find((entry) => entry.group === group && entry.segment === segment)?.codes.slice() ?? [];
+    return ITEM_GROUPS.find((entry) => entry.group === group)?.items.map(([code]) => code) ?? [];
   }
   return [filter];
 }
 
 /** Human-readable name for an item filter value. */
 export function itemFilterName(filter: string): string {
-  if (filter.startsWith(GROUP_PREFIX)) return `${filter.slice(GROUP_PREFIX.length)} (all items)`;
+  if (filter.startsWith(GROUP_PREFIX)) {
+    const [group, segment] = filter.slice(GROUP_PREFIX.length).split(":");
+    if (segment) return `${group} ${ITEM_SEGMENTS.find((entry) => entry.group === group && entry.segment === segment)?.label.toLowerCase() ?? segment}`;
+    return `${group} (all items)`;
+  }
   return ITEM_GROUPS.flatMap((entry) => entry.items).find(([code]) => code === filter)?.[1] ?? filter;
 }
