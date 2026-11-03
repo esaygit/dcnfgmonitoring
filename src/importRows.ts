@@ -25,14 +25,15 @@ export function invalidImportFields(row: ImportRow): Partial<Record<Header, stri
   return invalid;
 }
 
-// A possible duplicate needs the SAME batch code, the same quantity and at least one shared pallet.
-// Different batches of one transaction often share pallets and quantities, so they are not duplicates of each other.
-type DuplicateKey = { quantity: string | number; pallets: string | string[]; batch: string | null | undefined; item: string | null | undefined };
+// A possible duplicate has the SAME quantity and at least one SHARED pallet number (same item when both are given).
+// Exception: two different lots (batch codes) of the same transaction legitimately share pallets and sometimes
+// quantities, so they are never flagged against each other.
+type DuplicateKey = { quantity: string | number; pallets: string | string[]; batch: string | null | undefined; item: string | null | undefined; reference?: string | null };
 
 const same = (left: string | null | undefined, right: string | null | undefined) => clean(left ?? "").toLowerCase() === clean(right ?? "").toLowerCase();
 
 export function sameQuantityAndPallet(left: DuplicateKey, right: DuplicateKey) {
-  if (!same(left.batch, right.batch)) return false;
+  if (clean(left.reference ?? "") && same(left.reference, right.reference) && !same(left.batch, right.batch)) return false;
   if (clean(left.item ?? "") && clean(right.item ?? "") && !same(left.item, right.item)) return false;
   const leftQuantity = String(left.quantity).replace(/,/g, "").trim(), rightQuantity = String(right.quantity).replace(/,/g, "").trim();
   if (!leftQuantity || !rightQuantity || !Number.isFinite(Number(leftQuantity)) || Number(leftQuantity) !== Number(rightQuantity)) return false;
@@ -40,7 +41,7 @@ export function sameQuantityAndPallet(left: DuplicateKey, right: DuplicateKey) {
   return normalizedPallets(left.pallets).some((pallet) => rightPallets.has(pallet.toLowerCase()));
 }
 
-export const rowKey = (row: ImportRow): DuplicateKey => ({ quantity: row.Quantity, pallets: row.Pallets, batch: row["Batch Code"], item: row["Item Code"] });
+export const rowKey = (row: ImportRow): DuplicateKey => ({ quantity: row.Quantity, pallets: row.Pallets, batch: row["Batch Code"], item: row["Item Code"], reference: row["Transaction Reference"] });
 
 /** Index of another review row that looks like a duplicate of rows[index], or -1. */
 export function localDuplicateIndex(rows: ImportRow[], index: number) {
@@ -55,6 +56,7 @@ export function toProbe(row: ImportRow): DuplicateProbe {
     item: clean(row["Item Code"]),
     quantity: quantity !== "" && Number.isFinite(Number(quantity)) ? Number(quantity) : null,
     pallets: normalizedPallets(row.Pallets),
+    reference: clean(row["Transaction Reference"]),
   };
 }
 
