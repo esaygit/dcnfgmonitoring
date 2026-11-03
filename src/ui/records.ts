@@ -91,7 +91,7 @@ function render() {
   const duplicateRows = result.rows.filter((transfer) => transfer.is_duplicate);
   recordsDuplicateWarning.classList.toggle("hidden", duplicateRows.length === 0);
   recordsDuplicateWarning.textContent = duplicateRows.length
-    ? `Possible duplicate${plural(duplicateRows.length)} found: ${duplicateRows.length} highlighted batch line${plural(duplicateRows.length)} on this page share the same batch code, quantity and at least one pallet with another saved record. Transaction Reference${plural(duplicateRows.length)}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.`
+    ? `Possible duplicate${plural(duplicateRows.length)} found: ${duplicateRows.length} highlighted batch line${plural(duplicateRows.length)} on this page have the same quantity and at least one pallet number as another saved record. Transaction Reference${plural(duplicateRows.length)}: ${transactionReferences(duplicateRows.map((transfer) => transfer.transaction_reference))}.`
     : "";
 
   recordsTable.style.minWidth = hidden.size ? "0" : "";
@@ -110,7 +110,7 @@ function render() {
       members.forEach((transfer) => {
         const line = document.createElement("span");
         line.className = duplicateIds.has(transfer.id) ? "stack-line dup-line" : "stack-line";
-        if (duplicateIds.has(transfer.id)) line.title = "Possible duplicate: another saved record has the same batch code, quantity and pallet.";
+        if (duplicateIds.has(transfer.id)) line.title = "Possible duplicate: another saved record has the same quantity and pallet number.";
         line.textContent = pick(transfer) || (members.length > 1 ? "—" : "");
         body.append(line);
       });
@@ -125,7 +125,7 @@ function render() {
       else {
         body.textContent = value;
         if (index === 9) td.classList.add("stacked");
-        if (index === 0 && duplicateIds.size) { const badge = document.createElement("span"); badge.className = "dup-badge"; badge.textContent = "Possible duplicate"; badge.title = "A batch in this transaction matches another saved record (same batch code, quantity and pallet)."; body.append(badge); }
+        if (index === 0 && duplicateIds.size) { const badge = document.createElement("span"); badge.className = "dup-badge"; badge.textContent = "Possible duplicate"; badge.title = "A batch in this transaction matches another saved record (same quantity and pallet number)."; body.append(badge); }
       }
       td.append(body); tr.append(td);
     });
