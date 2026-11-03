@@ -312,3 +312,15 @@ td.empty::before { --ic: var(--i-box); display: block; width: 40px; height: 40px
   .analytics-bar, .donut-svg, .auth-card, .auth-brand > div, .item-picker-menu, .columns-menu, .nav a.active::before { animation: none !important; }
   #theme-toggle::before, .file-picker, .file-picker::before { transition: none; }
 }
+
+/* ---------- Import review layout: preview above, table full width ---------- */
+.import-review-layout,
+.import-review-layout:has(.pdf-preview:not(.hidden)) { grid-template-columns: minmax(0, 1fr); }
+.import-review-layout > * { min-width: 0; }
+.pdf-preview select { width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.pdf-preview iframe { height: 520px; min-height: 360px; }
+.import-review-layout .table-wrap { border: 1px solid var(--line); border-radius: 12px; }
+@media (min-width: 1700px) {
+  .import-review-layout:has(.pdf-preview:not(.hidden)) { grid-template-columns: minmax(360px, 460px) minmax(0, 1fr); align-items: start; }
+  .pdf-preview iframe { height: 640px; }
+}
