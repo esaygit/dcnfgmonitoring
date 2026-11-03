@@ -7,6 +7,9 @@ import { batchesFromFilename, palletsFromFilename, parse, pdfTime } from "./pars
 const TEXT = "TRANSFER DOCUMENT GAA 123456 DOCUMENT DATE : 2026-10-27 DOCUMENT TIME : 14:32:10 SHIP FROM : W01 SHIP TO : W22 4554770121 RF MR EXP 50PPM 0041234LOC B240101 1,200 BAGS";
 const IWTS_FIXTURE = readFileSync(join(import.meta.dirname, "fixtures", "iwts-interwarehouse-transfer.txt"), "utf8");
 
+// Text of a real two-lot slip (one item, two lots), as pdf.js returns it.
+const TWO_LOT_TEXT = "490 COCO HARVEST INCORPORATED IWTS G01 CTANGUB IWTS | GAA021083 Interwarehouse Transfer Slip SHIP FROM :W49401 CHI Plant DCN Production Whse DOCUMENT DATE: 11-01-26 08:37:00 SHIP TO : W49852 CHI FG Albatross DCN Whse LOG DATE : ADDRESS : ADD033840 Purok 7, Labinay ARRIVAL DATE : 11-01-2026 08:37 Shipment/line Item Code/Description Location Lot Quantity Unt Weight EQ. Wht EQ.CBM / 4554770121RF DCN MR 50PPM SULF 25KG H14WLOC 63031H-RF-MR-EXPORT 10.00 25S * / 4554770121RF DCN MR 50PPM SULF 25KG H14WLOC 63041H-RF-MR-EXPORT 130.00 25S * Total Item : 2 T O T A L < TN/CASE/OTHERS > 140.00 REMARKS : RF MR EXPORT TRANSFER TO ALBATROSS WHSE";
+
 describe("pdfTime", () => {
   it("reads DOCUMENT TIME", () => expect(pdfTime("DOCUMENT DATE: 2026-10-27 DOCUMENT TIME: 08:15:30")).toBe("08:15:30"));
   it("reads a time right after the document date", () => expect(pdfTime("DOCUMENT DATE: 2026-10-27 14:32 SHIP FROM")).toBe("14:32:00"));
@@ -19,6 +22,7 @@ describe("palletsFromFilename", () => {
   it("reads the pallet numbers before the date", () => expect(palletsFromFilename("PALLETS 1234 1235 1236 20261027.pdf")).toBe("1234, 1235, 1236"));
   it("accepts the singular", () => expect(palletsFromFilename("PALLET 777 20261027.pdf")).toBe("777"));
   it("returns an empty string without pallets", () => expect(palletsFromFilename("IWTS 20261027.pdf")).toBe(""));
+  it("reads file names where spaces became underscores", () => expect(palletsFromFilename("GAA1_RF_PALLET_3105_3106_3107.pdf")).toBe("3105, 3106, 3107"));
 });
 
 describe("batchesFromFilename", () => {
@@ -29,6 +33,12 @@ describe("batchesFromFilename", () => {
     ]);
   });
   it("returns nothing when the name has no batches", () => expect(batchesFromFilename("PALLETS 100 20261027.pdf")).toEqual([]));
+  it("reads file names where spaces became underscores", () => {
+    expect(batchesFromFilename("GAA021083_RF_MR_EXPORT_63031H_10_BAGS_63041H_130_BAGS_PALLET_3105.pdf")).toEqual([
+      { batch: "63031H", quantity: "10" },
+      { batch: "63041H", quantity: "130" },
+    ]);
+  });
 });
 
 describe("parse", () => {
@@ -46,11 +56,30 @@ describe("parse", () => {
       "Transferred To": "W00002",
       "Item Code": "4554770121",
       "Description": "RF DCN MR 50PPM SULF 25KG",
-      "Product Code": "",
+      "Product Code": "H14W",
       "Batch Code": "00001H-RF-MR-EXPORT",
       "Quantity": "60.00",
       "Pallets": "1001, 1002, 1003",
     });
+  });
+
+  it("reads the product code before LOC and the lot as the batch code on a two-lot slip", () => {
+    const filename = "GAA021083_RF_MR_EXPORT_63031H_10_BAGS_63041H_130_BAGS_PALLET_3105_3106_3107_3108_3109_3110_3111.pdf";
+    const { rows, filenameBatches } = parse(TWO_LOT_TEXT, filename);
+
+    expect(pdfTime(TWO_LOT_TEXT)).toBe("08:37:00");
+    expect(filenameBatches).toBe(2);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row["Item Code"] === "4554770121" && row.Description === "RF DCN MR 50PPM SULF 25KG" && row["Product Code"] === "H14W")).toBe(true);
+    expect(rows.map((row) => row["Batch Code"])).toEqual(["63031H-RF-MR-EXPORT", "63041H-RF-MR-EXPORT"]);
+    expect(rows.map((row) => row.Quantity)).toEqual(["10.00", "130.00"]);
+    expect(rows[0]).toMatchObject({ "Transaction Reference": "GAA021083", "Document Date": "2026-11-01", "Transferred From": "W49401", "Transferred To": "W49852", Pallets: "3105, 3106, 3107, 3108, 3109, 3110, 3111" });
+  });
+
+  it("still reads the product code when pdf.js puts a space before LOC", () => {
+    const { rows } = parse(TWO_LOT_TEXT.replace(/H14WLOC/g, "O14W LOC"), "x.pdf");
+    expect(rows.map((row) => row["Product Code"])).toEqual(["O14W", "O14W"]);
+    expect(rows[0].Description).toBe("RF DCN MR 50PPM SULF 25KG");
   });
 
   it("extracts the header fields and one item line", () => {
