@@ -339,21 +339,48 @@ td.empty::before { --ic: var(--i-box); display: block; width: 40px; height: 40px
 .segmented-control { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--tint); }
 .segmented-control button { min-height: 34px; padding: 6px 11px; border-radius: 7px; background: transparent; color: var(--ink-2); font-size: 0.82rem; font-weight: 650; white-space: nowrap; }
 .segmented-control button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
-.analytics-svg-wrap { display: grid; gap: 10px; min-width: 0; }
+.analytics-svg-wrap { display: grid; gap: 14px; min-width: 0; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); }
 .analytics-svg { display: block; width: 100%; height: auto; overflow: visible; }
-.analytics-gridline { stroke: var(--line); stroke-width: 1; }
-.analytics-axis-label { fill: var(--ink-2); font: 11px var(--font); }
+.analytics-gridline { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 5; }
+.analytics-gridline:last-of-type { stroke: color-mix(in srgb, var(--ink-2) 32%, var(--line)); stroke-dasharray: none; }
+.analytics-axis-label { fill: var(--ink-2); font: 12px var(--font); font-variant-numeric: tabular-nums; }
 .analytics-svg a { cursor: pointer; }
 .analytics-svg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .analytics-point-hit { fill: transparent; }
-.analytics-point { stroke: var(--surface); stroke-width: 2; }
-.analytics-svg a:hover .analytics-point { r: 6; }
+.analytics-point { stroke: var(--surface); stroke-width: 2.5; transition: transform 140ms ease-out; transform-box: fill-box; transform-origin: center; }
+.analytics-point-hit:focus-visible + .analytics-point { stroke: var(--ink); stroke-width: 3; }
+.analytics-area { pointer-events: none; }
+.analytics-line { pointer-events: none; }
+.analytics-comparison-line { pointer-events: none; }
+.analytics-mix-area { transition: opacity 140ms ease-out; }
 .analytics-bar-segment { transition: opacity 120ms ease; }
 .analytics-svg a:hover .analytics-bar-segment { opacity: 0.72; }
 .analytics-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--ink-2); font-size: 0.8rem; }
 .analytics-legend span { display: inline-flex; align-items: center; gap: 8px; }
-.analytics-legend i { width: 14px; height: 3px; background: var(--legend-color); }
+.analytics-legend i { width: 20px; height: 4px; border-radius: 4px; background: var(--legend-color); }
 .analytics-legend i.is-dashed { height: 0; border-top: 2px dashed var(--legend-color); background: none; }
+.analytics-legend i.is-area { width: 12px; height: 10px; border: 1px solid color-mix(in srgb, var(--legend-color) 70%, var(--surface)); border-radius: 3px; }
+.analytics-tab-panel:not([hidden]) .analytics-svg { animation: analytics-chart-enter 240ms var(--ease-out) both; }
+.analytics-tab-panel:not([hidden]) .analytics-legend { animation: analytics-legend-enter 220ms 35ms var(--ease-out) both; }
+.analytics-tabs [role="tab"] { transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease; }
+.segmented-control button { transition: background-color 140ms ease, color 140ms ease; }
+.analytics-chart-panel { overflow: hidden; }
+@keyframes analytics-chart-enter {
+  from { opacity: 0.62; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes analytics-legend-enter {
+  from { opacity: 0.55; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes analytics-chart-fade {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .analytics-svg a:hover .analytics-point { transform: scale(1.3); }
+  .analytics-svg a:hover .analytics-mix-area { opacity: 1; }
+}
 .quality-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .quality-panel { min-width: 0; }
 .quality-weekly { grid-column: 1 / -1; }
@@ -390,4 +417,8 @@ td.empty::before { --ic: var(--i-box); display: block; width: 40px; height: 40px
   .analytics-svg { min-width: 600px; }
   #analytics-mix-10-chart .analytics-svg,
   #analytics-mix-50-chart .analytics-svg { min-width: 760px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .analytics-tab-panel:not([hidden]) .analytics-svg,
+  .analytics-tab-panel:not([hidden]) .analytics-legend { animation: analytics-chart-fade 120ms ease-out both; }
 }

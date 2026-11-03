@@ -4,7 +4,7 @@ import { fmt } from "../utils";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 760, HEIGHT = 260, LEFT = 54, RIGHT = 18, TOP = 16, BOTTOM = 42;
-const ITEM_COLORS = ["#1f6fa5", "#79beee", "#168477", "#3fb6a8", "#bd8a19", "#f2b84b", "#386a8b", "#9acfe9"];
+const ITEM_COLORS = ["#155b94", "#438fc1", "#79beee", "#abd8f3", "#087f8c", "#32a6a6", "#70c2b5", "#a9d9c9"];
 
 function svgNode<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}, text?: string) {
   const node = document.createElementNS(NS, tag);
@@ -52,13 +52,19 @@ function linePath(values: number[], x: (index: number, count: number) => number,
   return values.map((value, index) => `${index ? "L" : "M"}${x(index, values.length)},${y(value)}`).join(" ");
 }
 
-function addLegend(container: HTMLElement, entries: { label: string; color: string; dashed?: boolean }[]) {
+function areaPath(values: number[], x: (index: number, count: number) => number, y: (value: number) => number, baseline: number) {
+  if (!values.length) return "";
+  return `${linePath(values, x, y)} L${x(values.length - 1, values.length)},${baseline} L${x(0, values.length)},${baseline} Z`;
+}
+
+function addLegend(container: HTMLElement, entries: { label: string; color: string; dashed?: boolean; area?: boolean }[]) {
   const legend = document.createElement("div");
   legend.className = "analytics-legend";
   for (const entry of entries) {
     const item = document.createElement("span"), mark = document.createElement("i");
     mark.style.setProperty("--legend-color", entry.color);
     if (entry.dashed) mark.classList.add("is-dashed");
+    if (entry.area) mark.classList.add("is-area");
     item.append(mark, document.createTextNode(entry.label));
     legend.append(item);
   }
@@ -97,22 +103,30 @@ export function renderTrendChart(
   const max = Math.max(0, ...current.flatMap((bucket) => series.map(({ key }) => bucket[key])), ...previousValues.flat());
   const svg = chartSvg(`${group} export and downgraded quantities over time`);
   const axis = addAxis(svg, max);
-  series.forEach((entry, seriesIndex) => {
+  const baseline = HEIGHT - BOTTOM;
+  for (const entry of series) {
     const values = current.map((bucket) => bucket[entry.key]);
-    if (comparison && previous.length) {
+    svg.append(svgNode("path", { d: areaPath(values, axis.x, axis.y, baseline), fill: entry.color, "fill-opacity": 0.1, class: "analytics-area" }));
+  }
+  if (comparison && previous.length) {
+    series.forEach((entry, seriesIndex) => {
       svg.append(svgNode("path", {
         d: linePath(previousValues[seriesIndex], axis.x, axis.y),
-        fill: "none", stroke: entry.color, "stroke-width": 2, "stroke-dasharray": "6 6", opacity: 0.35,
+        fill: "none", stroke: entry.color, "stroke-width": 2, "stroke-dasharray": "6 6", opacity: 0.48,
+        class: "analytics-comparison-line",
       }));
-    }
-    svg.append(svgNode("path", { d: linePath(values, axis.x, axis.y), fill: "none", stroke: entry.color, "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    });
+  }
+  series.forEach((entry) => {
+    const values = current.map((bucket) => bucket[entry.key]);
+    svg.append(svgNode("path", { d: linePath(values, axis.x, axis.y), fill: "none", stroke: entry.color, "stroke-width": 3.5, "stroke-linejoin": "round", "stroke-linecap": "round", class: "analytics-line" }));
     values.forEach((value, index) => {
       const range = bucketRange(current[index].key, interval, from, to);
       if (!range) return;
       const link = svgNode("a", { href: analyticsRecordsHref(range.from, range.to, entry.filter), "aria-label": `${current[index].label}, ${entry.label}, ${fmt(value)} quantity` });
       link.append(
-        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 11, class: "analytics-point-hit" }),
-        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 4, fill: entry.color, class: "analytics-point" }),
+        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 12, class: "analytics-point-hit" }),
+        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 5, fill: entry.color, class: "analytics-point" }),
         svgNode("title", {}, `${current[index].label} · ${entry.label}: ${fmt(value)}`),
       );
       svg.append(link);
@@ -148,7 +162,7 @@ export function renderVolumeChart(container: HTMLElement, buckets: AnalyticsBuck
       const height = group.value / axis.upper * axis.chartHeight, y = bottom - height;
       const link = svgNode("a", { href: analyticsRecordsHref(range.from, range.to, `group:${group.name}`), "aria-label": `${bucket.label}, ${group.name}, ${fmt(group.value)} quantity` });
       link.append(
-        svgNode("rect", { x, y, width: barWidth, height: Math.max(1, height), fill: group.color, class: "analytics-bar-segment" }),
+        svgNode("rect", { x, y, width: barWidth, height: Math.max(1, height), rx: Math.min(4, barWidth / 3), fill: group.color, class: "analytics-bar-segment" }),
         svgNode("title", {}, `${bucket.label} · ${group.name}: ${fmt(group.value)}`),
       );
       svg.append(link);
@@ -157,7 +171,7 @@ export function renderVolumeChart(container: HTMLElement, buckets: AnalyticsBuck
   });
   addXLabels(svg, buckets, axis.x);
   container.append(svg);
-  addLegend(container, [{ label: "10 PPM", color: "#1f6fa5" }, { label: "50 PPM", color: "#79beee" }]);
+  addLegend(container, [{ label: "10 PPM", color: "#1f6fa5", area: true }, { label: "50 PPM", color: "#79beee", area: true }]);
 }
 
 export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[], group: string, from: string, to: string) {
@@ -187,6 +201,7 @@ export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[
     addLegend(container, series.map(({ itemCode }) => ({
       label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
       color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
+      area: true,
     })));
     return;
   }
@@ -197,9 +212,9 @@ export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[
     const upperPath = tops.map((value, index) => `${index ? "L" : "M"}${axis.x(index, tops.length)},${axis.y(value)}`).join(" ");
     const lowerPath = bottoms.map((_, index) => index).reverse().map((index) => `L${axis.x(index, bottoms.length)},${axis.y(bottoms[index])}`).join(" ");
     const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(item.itemCode) % ITEM_COLORS.length;
-    const path = svgNode("path", { d: `${upperPath} ${lowerPath} Z`, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.76, stroke: "var(--surface)", "stroke-width": 1 });
+    const path = svgNode("path", { d: `${upperPath} ${lowerPath} Z`, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.88, stroke: "var(--surface)", "stroke-width": 2, class: "analytics-mix-area" });
     const link = svgNode("a", { href: analyticsRecordsHref(from, to, item.itemCode), "aria-label": `${item.itemCode}, ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === item.itemCode)?.[1] ?? item.itemCode}, view ${group} records` });
-    link.append(path);
+    link.append(path, svgNode("title", {}, `${item.itemCode} · ${values.map((value, index) => `${buckets[index].label}: ${fmt(value)}%`).join(" · ")}`));
     svg.append(link);
   }
   addXLabels(svg, buckets, axis.x);
@@ -207,5 +222,6 @@ export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[
   addLegend(container, series.map(({ itemCode }) => ({
     label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
     color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
+    area: true,
   })));
 }
