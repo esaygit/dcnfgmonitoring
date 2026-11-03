@@ -26,6 +26,7 @@ let reviewRowEls: HTMLTableRowElement[] = [];
 let afterSave: () => Promise<void> = async () => {};
 let previewUrl: string | null = null;
 let draftWriteFailed = false;
+let serverCheckWarned = false;
 
 function persistDraft() {
   try {
@@ -111,6 +112,11 @@ const scheduleServerCheck = debounce(async () => {
     });
     refreshReviewDuplicates();
   } catch (error) {
+    // Rows in this import are still compared with each other; only the saved-record comparison is unavailable.
+    if (!serverCheckWarned) {
+      serverCheckWarned = true;
+      message("Could not check saved records for duplicates. Re-run supabase/server-side-records.sql in Supabase.", "error");
+    }
     console.warn("Saved-record duplicate check unavailable; only rows in this import are compared.", error);
   }
 }, 400);
@@ -123,11 +129,11 @@ function refreshReviewDuplicates() {
     if (match) duplicateRows.push(row);
     if (!tr) return;
     tr.classList.toggle("possible-duplicate", Boolean(match));
-    tr.title = match ? `Possible duplicate of ${match}: same batch code, quantity and pallet number.` : "";
+    tr.title = match ? `Possible duplicate of ${match}: same quantity and pallet number.` : "";
   });
   const count = duplicateRows.length, plural = count === 1 ? "" : "s";
   reviewDuplicateWarning.classList.toggle("hidden", count === 0);
-  reviewDuplicateWarning.textContent = count ? `Possible duplicate${plural} found: ${count} highlighted row${plural} match the batch code, quantity and at least one pallet of another row or saved record. Transaction Reference${plural}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
+  reviewDuplicateWarning.textContent = count ? `Possible duplicate${plural} found: ${count} highlighted row${plural} have the same quantity and at least one pallet number as another row or saved record. Transaction Reference${plural}: ${transactionReferences(duplicateRows.map((row) => row["Transaction Reference"]))}. Check before saving.` : "";
 }
 
 // Full render: only when rows are added or removed.
