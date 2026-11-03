@@ -227,7 +227,10 @@ td.empty::before { --ic: var(--i-box); display: block; width: 40px; height: 40px
 :root[data-theme] .item-picker-menu, :root[data-theme] .columns-menu { border-radius: 14px; box-shadow: var(--shadow-2); animation: pop 160ms var(--ease-out); transform-origin: top; }
 :root[data-theme] .drawer { border-radius: 20px 0 0 20px; box-shadow: -24px 0 60px -16px #050d1466; }
 .drawer-backdrop { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-:root[data-theme] .status { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: var(--shadow-2); }
+:root[data-theme] .status { z-index: 100; display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 97%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: var(--shadow-2); }
+:root[data-theme] .status:empty { display: none; }
+:root[data-theme] .status.success { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+:root[data-theme] .status.error { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
 .status { --ic: var(--i-info); }
 .status.success { --ic: var(--i-ok); }
 .status.error { --ic: var(--i-alert); }
