@@ -1,5 +1,5 @@
 import { ITEM_GROUPS } from "../constants";
-import { analyticsRecordsHref, bucketRange, type AnalyticsBucket, type AnalyticsInterval } from "../analyticsModel";
+import { analyticsRecordsHref, bucketRange, buildMixSeries, type AnalyticsBucket, type AnalyticsInterval } from "../analyticsModel";
 import { fmt } from "../utils";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -160,51 +160,52 @@ export function renderVolumeChart(container: HTMLElement, buckets: AnalyticsBuck
   addLegend(container, [{ label: "10 PPM", color: "#1f6fa5" }, { label: "50 PPM", color: "#79beee" }]);
 }
 
-export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[], from: string, to: string) {
+export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[], group: string, from: string, to: string) {
   container.replaceChildren();
-  if (!buckets.length || !buckets.some((bucket) => Object.keys(bucket.itemQuantities).length)) {
-    container.textContent = "No item-code quantities are available for this range.";
+  const series = buildMixSeries(buckets, group);
+  if (!buckets.length || !series.length) {
+    container.textContent = `No ${group} item-code quantities are available for this range.`;
     return;
   }
-  const codes = ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).filter((code) => buckets.some((bucket) => bucket.itemQuantities[code]));
-  const chartBuckets = buckets.map((bucket) => ({ ...bucket, total: codes.reduce((sum, code) => sum + (bucket.itemQuantities[code] ?? 0), 0) }));
-  const svg = chartSvg("100 percent stacked area showing the transfer item-code mix over time");
+  const codes = series.map(({ itemCode }) => itemCode);
+  const svg = chartSvg(`100 percent stacked area showing the ${group} item-code mix over time`);
   const axis = addAxis(svg, 100);
-  if (chartBuckets.length === 1 && chartBuckets[0].total > 0) {
+  if (buckets.length === 1) {
     let bottom = HEIGHT - BOTTOM;
-    for (const code of codes) {
-      const quantity = chartBuckets[0].itemQuantities[code] ?? 0;
-      if (!quantity) continue;
-      const height = quantity / chartBuckets[0].total / axis.upper * axis.chartHeight, y = bottom - height;
-      const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(code) % ITEM_COLORS.length;
-      const link = svgNode("a", { href: analyticsRecordsHref(from, to, code), "aria-label": `${code}, ${fmt(quantity / chartBuckets[0].total * 100)} percent of item mix, view records` });
+    for (const item of series) {
+      const share = item.values[0];
+      if (!share) continue;
+      const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(item.itemCode) % ITEM_COLORS.length;
+      const height = share / axis.upper * axis.chartHeight, y = bottom - height;
+      const link = svgNode("a", { href: analyticsRecordsHref(from, to, item.itemCode), "aria-label": `${item.itemCode}, ${fmt(share)} percent of ${group} item mix, view records` });
       link.append(svgNode("rect", { x: axis.x(0, 1) - 12, y, width: 24, height, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.76, class: "analytics-bar-segment" }));
       svg.append(link);
       bottom = y;
     }
     addXLabels(svg, buckets, axis.x);
     container.append(svg);
-    addLegend(container, codes.map((code) => ({
-      label: `${code} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([itemCode]) => itemCode === code)?.[1] ?? code}`,
-      color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(code) % ITEM_COLORS.length],
+    addLegend(container, series.map(({ itemCode }) => ({
+      label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
+      color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
     })));
     return;
   }
-  for (const code of codes) {
-    const values = chartBuckets.map((bucket) => bucket.total ? (bucket.itemQuantities[code] ?? 0) / bucket.total * 100 : 0);
-    const bottoms = chartBuckets.map((_, index) => codes.slice(0, codes.indexOf(code)).reduce((sum, prior) => sum + (chartBuckets[index].total ? (chartBuckets[index].itemQuantities[prior] ?? 0) / chartBuckets[index].total * 100 : 0), 0));
+  for (const [seriesIndex, item] of series.entries()) {
+    const values = item.values;
+    const bottoms = buckets.map((_, index) => series.slice(0, seriesIndex).reduce((sum, prior) => sum + prior.values[index], 0));
     const tops = values.map((value, index) => value + bottoms[index]);
     const upperPath = tops.map((value, index) => `${index ? "L" : "M"}${axis.x(index, tops.length)},${axis.y(value)}`).join(" ");
     const lowerPath = bottoms.map((_, index) => index).reverse().map((index) => `L${axis.x(index, bottoms.length)},${axis.y(bottoms[index])}`).join(" ");
-    const path = svgNode("path", { d: `${upperPath} ${lowerPath} Z`, fill: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(code) % ITEM_COLORS.length], "fill-opacity": 0.76, stroke: "var(--surface)", "stroke-width": 1 });
-    const link = svgNode("a", { href: analyticsRecordsHref(from, to, code), "aria-label": `${code}, ${ITEM_GROUPS.flatMap(({ items }) => items).find(([itemCode]) => itemCode === code)?.[1] ?? code}, view records` });
+    const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(item.itemCode) % ITEM_COLORS.length;
+    const path = svgNode("path", { d: `${upperPath} ${lowerPath} Z`, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.76, stroke: "var(--surface)", "stroke-width": 1 });
+    const link = svgNode("a", { href: analyticsRecordsHref(from, to, item.itemCode), "aria-label": `${item.itemCode}, ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === item.itemCode)?.[1] ?? item.itemCode}, view ${group} records` });
     link.append(path);
     svg.append(link);
   }
   addXLabels(svg, buckets, axis.x);
   container.append(svg);
-  addLegend(container, codes.map((code) => ({
-    label: `${code} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([itemCode]) => itemCode === code)?.[1] ?? code}`,
-    color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(code) % ITEM_COLORS.length],
+  addLegend(container, series.map(({ itemCode }) => ({
+    label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
+    color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
   })));
 }

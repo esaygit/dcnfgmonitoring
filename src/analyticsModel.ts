@@ -23,6 +23,8 @@ export type QualitySummary = {
   duplicatesByWeek: { week: string; records: number }[];
 };
 
+export type MixSeries = { itemCode: string; values: number[] };
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function bucketStart(value: string, interval: AnalyticsInterval) {
@@ -100,6 +102,19 @@ export function buildBuckets(records: Transfer[], from: string, to: string, inte
     if (segment?.group === "50 PPM" && segment.segment === "downgraded") bucket.downgraded50 += quantity;
   }
   return [...buckets.values()];
+}
+
+export function buildMixSeries(buckets: AnalyticsBucket[], group: string): MixSeries[] {
+  const items = ITEM_SEGMENTS.filter((entry) => entry.group === group).flatMap(({ codes }) => codes);
+  return items
+    .map((itemCode) => ({
+      itemCode,
+      values: buckets.map((bucket) => {
+        const total = items.reduce((sum, code) => sum + (bucket.itemQuantities[code] ?? 0), 0);
+        return total ? (bucket.itemQuantities[itemCode] ?? 0) / total * 100 : 0;
+      }),
+    }))
+    .filter((series) => series.values.some((value) => value > 0));
 }
 
 export function comparisonRange(from: string, to: string) {

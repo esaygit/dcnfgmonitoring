@@ -16,7 +16,8 @@ const ppmButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ppm]"
 const intervalButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-interval]")];
 const trendChart = document.querySelector<HTMLElement>("#analytics-trend-chart")!;
 const volumeChart = document.querySelector<HTMLElement>("#analytics-volume-chart")!;
-const mixChart = document.querySelector<HTMLElement>("#analytics-mix-chart")!;
+const mix10Chart = document.querySelector<HTMLElement>("#analytics-mix-10-chart")!;
+const mix50Chart = document.querySelector<HTMLElement>("#analytics-mix-50-chart")!;
 const qualityMissing = document.querySelector<HTMLElement>("#analytics-missing-count")!;
 const qualityMissingLink = document.querySelector<HTMLAnchorElement>("#analytics-missing-link")!;
 const qualityUnlisted = document.querySelector<HTMLElement>("#analytics-unlisted-list")!;
@@ -103,7 +104,8 @@ function renderActiveView() {
     : [];
   renderTrendChart(trendChart, current, previous, qualityGroup, interval, state.from, state.to, state.comparison);
   renderVolumeChart(volumeChart, current, interval, state.from, state.to);
-  renderMixChart(mixChart, current, state.from, state.to);
+  renderMixChart(mix10Chart, current, "10 PPM", state.from, state.to);
+  renderMixChart(mix50Chart, current, "50 PPM", state.from, state.to);
   trendNote.textContent = `Export and downgraded quantities for ${qualityGroup}.`;
 }
 

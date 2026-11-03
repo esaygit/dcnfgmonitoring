@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsRecordsHref, bucketRange, bucketStart, buildBuckets, comparisonRange, percentChange, summarizeQuality } from "./analyticsModel";
+import { analyticsRecordsHref, bucketRange, bucketStart, buildBuckets, buildMixSeries, comparisonRange, percentChange, summarizeQuality } from "./analyticsModel";
 import type { Transfer } from "./types";
 
 const transfer = (overrides: Partial<Transfer>): Transfer => ({
@@ -56,6 +56,24 @@ describe("analytics time buckets", () => {
     ], "2026-10-12", "2026-10-12", "day");
 
     expect(bucket).toMatchObject({ exports10: 10, downgraded10: 5, ppm10: 15, ppm50: 0 });
+  });
+
+  it("builds separate 100 percent item mixes for each PPM group", () => {
+    const buckets = buildBuckets([
+      transfer({ id: "50-export", item_code: "4554770121", quantity: 30 }),
+      transfer({ id: "50-downgraded", item_code: "4554770128", quantity: 10 }),
+      transfer({ id: "10-export", item_code: "4554770148", quantity: 15 }),
+      transfer({ id: "10-downgraded", item_code: "4554770147", quantity: 5 }),
+    ], "2026-10-12", "2026-10-12", "day");
+
+    expect(buildMixSeries(buckets, "10 PPM")).toEqual([
+      { itemCode: "4554770148", values: [75] },
+      { itemCode: "4554770147", values: [25] },
+    ]);
+    expect(buildMixSeries(buckets, "50 PPM")).toEqual([
+      { itemCode: "4554770121", values: [75] },
+      { itemCode: "4554770128", values: [25] },
+    ]);
   });
 
   it("counts missing codes, unlisted codes, and flagged duplicates by their week", () => {
