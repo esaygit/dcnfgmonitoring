@@ -13,7 +13,7 @@ export type Transfer = {
   pallets: string[];
   source_filename: string | null;
   created_at: string;
-  /** Set by the records_page database function: another saved record has the same batch, quantity and a shared pallet. */
+  /** Set by the records_page database function: another saved record has the same quantity and a shared pallet. */
   is_duplicate?: boolean;
 };
 
@@ -39,4 +39,4 @@ export type ItemStat = { itemCode: string; description: string; transactions: nu
 export type DashboardStats = { records: number; quantity: number; references: number; destinations: number; items: ItemStat[] };
 
 /** What the duplicate check sends to the database for one review row. */
-export type DuplicateProbe = { batch: string; item: string; quantity: number | null; pallets: string[] };
+export type DuplicateProbe = { batch: string; item: string; quantity: number | null; pallets: string[]; reference: string };
