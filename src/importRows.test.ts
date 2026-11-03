@@ -41,32 +41,40 @@ describe("import row assistance", () => {
 
 describe("sameQuantityAndPallet", () => {
   const base = { quantity: "100", pallets: "1001, 1002", batch: "B1", item: "4554770121" };
-  it("matches the same batch, quantity and a shared pallet", () => expect(sameQuantityAndPallet(base, { ...base, pallets: "1002" })).toBe(true));
+  it("matches the same quantity and a shared pallet", () => expect(sameQuantityAndPallet(base, { ...base, pallets: "1002" })).toBe(true));
+  it("matches even when the batch code differs, if they are not lots of one transaction", () => expect(sameQuantityAndPallet(base, { ...base, batch: "B2", pallets: "1002" })).toBe(true));
   it("ignores thousands separators in the quantity", () => expect(sameQuantityAndPallet({ ...base, quantity: "1,000" }, { ...base, quantity: 1000, pallets: ["1001"] })).toBe(true));
-  it("does not match a different batch", () => expect(sameQuantityAndPallet(base, { ...base, batch: "B2" })).toBe(false));
   it("does not match a different quantity", () => expect(sameQuantityAndPallet(base, { ...base, quantity: "101" })).toBe(false));
   it("does not match without a shared pallet", () => expect(sameQuantityAndPallet(base, { ...base, pallets: "9999" })).toBe(false));
   it("does not match different item codes", () => expect(sameQuantityAndPallet(base, { ...base, item: "4554770128" })).toBe(false));
+  it("does not flag two different lots of the same transaction", () => {
+    expect(sameQuantityAndPallet({ ...base, reference: "GAA1" }, { ...base, reference: "GAA1", batch: "B2", pallets: "1002" })).toBe(false);
+  });
+  it("flags the same lot of the same transaction (a re-import)", () => {
+    expect(sameQuantityAndPallet({ ...base, reference: "GAA1" }, { ...base, reference: "GAA1", pallets: "1002" })).toBe(true);
+  });
 });
 
 describe("localDuplicateIndex", () => {
-  it("finds another row with the same batch, quantity and pallet", () => {
+  it("finds another row with the same quantity and a shared pallet, but not another lot of the same transaction", () => {
     const rows = [
-      makeRow({ "Batch Code": "B1", Quantity: "100", Pallets: "1001, 1002" }),
-      makeRow({ "Batch Code": "B1", Quantity: "100", Pallets: "1002" }),
-      makeRow({ "Batch Code": "B2", Quantity: "100", Pallets: "1002" }),
-      makeRow({ "Batch Code": "B1", Quantity: "100", Pallets: "9999" }),
+      makeRow({ "Transaction Reference": "GAA1", "Batch Code": "B1", Quantity: "100", Pallets: "1001, 1002" }),
+      makeRow({ "Transaction Reference": "GAA1", "Batch Code": "B1", Quantity: "100", Pallets: "1002" }),
+      makeRow({ "Transaction Reference": "GAA1", "Batch Code": "B2", Quantity: "100", Pallets: "1002" }),
+      makeRow({ "Transaction Reference": "GAA1", "Batch Code": "B1", Quantity: "100", Pallets: "9999" }),
+      makeRow({ "Transaction Reference": "GAA2", "Batch Code": "OTHER", Quantity: "100", Pallets: "1001" }),
     ];
     expect(localDuplicateIndex(rows, 0)).toBe(1);
     expect(localDuplicateIndex(rows, 1)).toBe(0);
-    expect(localDuplicateIndex(rows, 2)).toBe(-1); // different batch of the same transaction is fine
+    expect(localDuplicateIndex(rows, 2)).toBe(-1); // other lots of the same transaction are ignored; GAA2 shares no pallet with it
     expect(localDuplicateIndex(rows, 3)).toBe(-1);
+    expect(localDuplicateIndex(rows, 4)).toBe(0);
   });
 });
 
 describe("toProbe", () => {
   it("cleans the row for the database check", () => {
-    expect(toProbe(makeRow({ "Batch Code": " B1 ", "Item Code": "4554770121", Quantity: "1,200", Pallets: "1001, 1002" }))).toEqual({ batch: "B1", item: "4554770121", quantity: 1200, pallets: ["1001", "1002"] });
+    expect(toProbe(makeRow({ "Transaction Reference": " GAA1 ", "Batch Code": " B1 ", "Item Code": "4554770121", Quantity: "1,200", Pallets: "1001, 1002" }))).toEqual({ batch: "B1", item: "4554770121", quantity: 1200, pallets: ["1001", "1002"], reference: "GAA1" });
   });
   it("sends null for a missing or invalid quantity", () => {
     expect(toProbe(makeRow({ Quantity: "" })).quantity).toBeNull();
