@@ -11,7 +11,7 @@ export async function loadOverview() {
   try {
     const [stats, recent] = await Promise.all([
       fetchStats(null, null),
-      fetchRecords({ query: "", dateFrom: "", dateTo: "", batch: "", item: "", sort: "date-desc" }, 0, 6),
+      fetchRecords({ query: "", dateFrom: "", dateTo: "", batch: "", pallet: "", item: "", sort: "date-desc" }, 0, 6),
     ]);
     countTo($<HTMLElement>("#total-records"), stats.records, whole);
     countTo($<HTMLElement>("#total-quantity"), stats.quantity);

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { canonicalItemCode, itemCodesFor } from "./constants";
-import type { DashboardStats, DuplicateProbe, ItemStat, NewTransfer, RecordFilters, RecordsPage, Transfer } from "./types";
+import type { DashboardStats, DuplicateProbe, ItemStat, NewTransfer, RecordFilters, RecordsPage, RejectionHistory, RejectionOption, Transfer } from "./types";
 import { normalizedDate } from "./utils";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -78,7 +78,7 @@ export async function fetchRecords(filters: RecordFilters, page: number, pageSiz
     p_offset: page * pageSize,
     p_from_warehouse: "",
     p_to_warehouse: "",
-    p_pallet: "",
+    p_pallet: filters.pallet.trim(),
   });
   if (error) throw new Error(error.message);
   const result = data as { rows?: Transfer[]; total_groups?: number; total_records?: number; total_quantity?: number } | null;
@@ -124,4 +124,40 @@ export async function checkDuplicates(probes: DuplicateProbe[]) {
 export async function insertTransfers(data: NewTransfer[]) {
   const { error } = await client().from("transfers").insert(data);
   if (error) throw new Error(error.message);
+}
+
+export async function fetchRejectionOptions(query = ""): Promise<RejectionOption[]> {
+  const { data, error } = await client().rpc("loading_rejection_options", { p_query: query });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as RejectionOption[]).map((option) => ({
+    ...option,
+    original_quantity: Number(option.original_quantity),
+    available_quantity: Number(option.available_quantity),
+  }));
+}
+
+export async function submitLoadingRejection(reference: string, date: string, lines: unknown[]) {
+  const { data, error } = await client().rpc("submit_loading_rejection", {
+    p_rejection_reference: reference,
+    p_rejection_date: date,
+    p_lines: lines,
+  });
+  if (error) throw new Error(error.message);
+  return data as { id: string; rejection_reference: string } | null;
+}
+
+export async function fetchRejectionHistory(reference = "", batch = "", from: string | null = null, to: string | null = null): Promise<RejectionHistory[]> {
+  const { data, error } = await client().rpc("loading_rejection_history", {
+    p_reference: reference,
+    p_batch: batch,
+    p_from: from,
+    p_to: to,
+  });
+  if (error) throw new Error(error.message);
+  const result = data as RejectionHistory[] | null;
+  return (result ?? []).map((entry) => ({
+    ...entry,
+    affected_batches: Number(entry.affected_batches),
+    total_rejected_quantity: Number(entry.total_rejected_quantity),
+  }));
 }

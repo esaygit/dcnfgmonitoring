@@ -2,9 +2,10 @@ import type { Row, Worksheet } from "exceljs";
 import type { Transfer } from "../types";
 import { displayDate, normalizedDate } from "../utils";
 import { message } from "./toast";
+import { julianDateFromBatch } from "../julianDate";
 
 /** Describes the filters the exported list was fetched with. */
-export type ExportContext = { text: string; from: string; to: string; batch: string };
+export type ExportContext = { text: string; from: string; to: string; batch: string; pallet: string };
 
 export async function exportToExcel(list: Transfer[], ctx: ExportContext) {
   if (!list.length) { message("There are no records to export.", "error"); return; }
@@ -34,21 +35,23 @@ export async function exportToExcel(list: Transfer[], ctx: ExportContext) {
 
     // Transfers sheet
     const ws = workbook.addWorksheet("Transfers", { properties: { tabColor: { argb: SKY } }, views: [{ state: "frozen", xSplit: 1, ySplit: 4, showGridLines: false }] });
-    const cols: [string, number][] = [["Transaction Reference", 24], ["Document Date", 16], ["Transferred From", 18], ["Transferred To", 18], ["Item Code", 16], ["Description", 36], ["Product Code", 16], ["Batch Code", 18], ["Quantity", 14], ["Pallets", 20], ["Source File", 42], ["Created At", 20]];
+    const cols: [string, number][] = [["Transaction Reference", 24], ["Document Date", 16], ["Transferred From", 18], ["Transferred To", 18], ["Item Code", 16], ["Description", 36], ["Product Code", 16], ["Batch Code", 18], ["Production Date", 16], ["Quantity", 14], ["Pallets", 20], ["Source File", 42], ["Created At", 20]];
     ws.columns = cols.map(([, width]) => ({ width }));
     title(ws, "DCN FG transfer register", `Generated ${displayDate(stamp)}. Filters: ${filterText}. ${list.length} record${list.length === 1 ? "" : "s"}.`, cols.length);
-    const head = ws.getRow(4); head.values = cols.map(([name]) => name); header(head, cols.length, [9], [2]);
+    const head = ws.getRow(4); head.values = cols.map(([name]) => name); header(head, cols.length, [10], [2, 9]);
     list.forEach((transfer, index) => {
       const [y, m, d] = normalizedDate(transfer.document_date, true).split("-").map(Number), created = new Date(transfer.created_at), row = ws.getRow(5 + index);
-      row.values = [transfer.transaction_reference, new Date(Date.UTC(y, m - 1, d)), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", Number(transfer.quantity), transfer.pallets.join(", "), transfer.source_filename ?? "", new Date(created.getTime() - created.getTimezoneOffset() * 60000)];
+      const productionDate = transfer.production_date?.trim() || julianDateFromBatch(transfer.batch_code)?.date || "";
+      const [py, pm, pd] = productionDate ? productionDate.split("-").map(Number) : [0, 0, 0];
+      row.values = [transfer.transaction_reference, new Date(Date.UTC(y, m - 1, d)), transfer.transferred_from, transfer.transferred_to, transfer.item_code, transfer.description, transfer.product_code ?? "", transfer.batch_code ?? "", productionDate ? new Date(Date.UTC(py, pm - 1, pd)) : "Invalid", Number(transfer.quantity), transfer.pallets.join(", "), transfer.source_filename ?? "", new Date(created.getTime() - created.getTimezoneOffset() * 60000)];
       row.height = 22;
-      for (let col = 1; col <= cols.length; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : col === 2 ? "center" : "left", indent: col === 9 || col === 2 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); }
-      row.getCell(2).numFmt = "dd/mm/yyyy"; row.getCell(9).numFmt = quantityFormat; row.getCell(12).numFmt = "dd/mm/yyyy hh:mm";
+      for (let col = 1; col <= cols.length; col++) { const cell = row.getCell(col); cell.border = { bottom: hair }; cell.font = { color: { argb: INK } }; cell.alignment = { vertical: "middle", horizontal: col === 10 ? "right" : col === 2 || col === 9 ? "center" : "left", indent: col === 10 || col === 2 || col === 9 ? 0 : 1 }; if (index % 2) cell.fill = fill(BAND); }
+      row.getCell(2).numFmt = "dd/mm/yyyy"; row.getCell(9).numFmt = "dd/mm/yyyy"; row.getCell(10).numFmt = quantityFormat; row.getCell(13).numFmt = "dd/mm/yyyy hh:mm";
     });
     const last = 4 + list.length, totalRow = ws.getRow(last + 1);
-    totalRow.height = 26; totalRow.getCell(1).value = "Total"; totalRow.getCell(9).value = { formula: `SUM(I5:I${last})`, result: total };
-    for (let col = 1; col <= cols.length; col++) { const cell = totalRow.getCell(col); cell.fill = fill(TINT); cell.font = { bold: true, color: { argb: INK } }; cell.border = { top: { style: "medium", color: { argb: INK } } }; cell.alignment = { vertical: "middle", horizontal: col === 9 ? "right" : "left", indent: col === 9 ? 0 : 1 }; }
-    totalRow.getCell(9).numFmt = quantityFormat;
+    totalRow.height = 26; totalRow.getCell(1).value = "Total"; totalRow.getCell(10).value = { formula: `SUM(J5:J${last})`, result: total };
+    for (let col = 1; col <= cols.length; col++) { const cell = totalRow.getCell(col); cell.fill = fill(TINT); cell.font = { bold: true, color: { argb: INK } }; cell.border = { top: { style: "medium", color: { argb: INK } } }; cell.alignment = { vertical: "middle", horizontal: col === 10 ? "right" : "left", indent: col === 10 ? 0 : 1 }; }
+    totalRow.getCell(10).numFmt = quantityFormat;
     ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: last, column: cols.length } };
     ws.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "4:4" };
 
@@ -81,7 +84,8 @@ export async function exportToExcel(list: Transfer[], ctx: ExportContext) {
     const timestampParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now).reduce<Record<string, string>>((parts, part) => ({ ...parts, [part.type]: part.value }), {});
     const generatedAt = `${timestampParts.year}${timestampParts.month}${timestampParts.day}-${timestampParts.hour}${timestampParts.minute}`;
     const safeBatch = ctx.batch.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
-    const filenameParts = ["dcn-fg-transfers", ctx.from ? `from-${ctx.from.replaceAll("-", "")}` : "", ctx.to ? `to-${ctx.to.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", `generated-${generatedAt}`].filter(Boolean);
+    const safePallet = ctx.pallet.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 20);
+    const filenameParts = ["dcn-fg-transfers", ctx.from ? `from-${ctx.from.replaceAll("-", "")}` : "", ctx.to ? `to-${ctx.to.replaceAll("-", "")}` : "", safeBatch ? `batch-${safeBatch}` : "", safePallet ? `pallet-${safePallet}` : "", `generated-${generatedAt}`].filter(Boolean);
     link.download = `${filenameParts.join("_")}.xlsx`; document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 2000);
     message(`${list.length} record${list.length === 1 ? "" : "s"} exported to Excel.`, "success");

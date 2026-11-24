@@ -11,6 +11,7 @@ export function parseRecordFilters(search: string): Partial<RecordFilters> {
     dateFrom: params.get("from") ?? "",
     dateTo: params.get("to") ?? "",
     batch: params.get("batch") ?? "",
+    pallet: params.get("pallet") ?? "",
     item: params.get("item") ?? "",
     sort: sortMode,
   };

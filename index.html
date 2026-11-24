@@ -76,6 +76,7 @@
           <a href="#/analytics" data-nav="analytics"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 16.5h14M5.5 14V9M10 14V4M14.5 14V7" /></svg><span>Analytics</span></a>
           <a href="#/import" data-nav="import"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 12V3m0 0L6.5 6.5M10 3l3.5 3.5M4 12.5v3A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-3" /></svg><span>Import</span></a>
           <a href="#/records" data-nav="records"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M7.5 5h9M7.5 10h9M7.5 15h9M3.5 5h.01M3.5 10h.01M3.5 15h.01" /></svg><span>Records</span></a>
+          <a href="#/rejects" data-nav="rejects"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 5.5h12M6 5.5V17h8V5.5M8 3h4v2.5M8.5 9l3 3m0-3-3 3" /></svg><span>Rejects</span></a>
         </nav>
       </aside>
 
@@ -316,6 +317,7 @@
               <label class="field">Document date from<input id="date-from-filter" type="date" lang="en-GB" /></label>
               <label class="field">Document date to<input id="date-to-filter" type="date" lang="en-GB" /></label>
               <label class="field">Batch code<input id="batch-filter" type="search" placeholder="Search batch code" /></label>
+              <label class="field">Pallet number<input id="pallet-filter" type="search" placeholder="Exact pallet number" /></label>
               <div class="field"><span id="item-picker-label">Item</span><div id="item-picker" class="item-picker"></div><select id="item-filter" class="hidden" tabindex="-1" aria-hidden="true"></select></div>
               <div class="filters-sort-group">
                 <label class="field">Sort by<select id="sort-filter"><option value="date-desc">Date: newest first</option><option value="date-asc">Date: oldest first</option><option value="qty-desc">Quantity: high to low</option><option value="qty-asc">Quantity: low to high</option></select></label>
@@ -335,6 +337,47 @@
                 <button id="page-next" type="button" class="secondary">Next</button>
               </div>
             </div>
+          </div>
+        </section>
+        <!-- Loading rejects -->
+        <section class="page hidden" data-page="rejects">
+          <header class="page-head">
+            <h1>Loading Rejects</h1>
+            <p>Record rejected loading quantities and preserve a complete audit trail.</p>
+          </header>
+
+          <div class="panel reject-entry">
+            <div class="section-heading">
+              <div><h2>New rejection</h2><p class="muted">Multiple batch lines are saved atomically.</p></div>
+            </div>
+            <div class="reject-header-grid">
+              <label class="field">Rejection reference<input id="reject-reference" type="text" placeholder="Generated automatically" autocomplete="off" /></label>
+              <label class="field">Rejection date<input id="reject-date" type="date" lang="en-GB" required /></label>
+            </div>
+            <div id="reject-lines" class="reject-lines"></div>
+            <datalist id="reject-batch-options"></datalist>
+            <div class="actions">
+              <button id="reject-add-line" type="button" class="secondary">Add batch line</button>
+              <button id="reject-review" type="button">Review rejection</button>
+            </div>
+            <div id="reject-errors" class="reject-errors hidden" role="alert"></div>
+            <div id="reject-preview" class="reject-preview hidden"></div>
+            <div id="reject-confirm-actions" class="actions hidden">
+              <button id="reject-confirm" type="button">Confirm and save rejection</button>
+            </div>
+          </div>
+
+          <div class="panel reject-history">
+            <div class="section-heading">
+              <div><h2>Rejection history</h2><p class="muted">Search recorded rejection transactions and open their audit details.</p></div>
+            </div>
+            <div class="reject-history-filters">
+              <label class="field">Reference<input id="reject-history-reference" type="search" placeholder="LR-" /></label>
+              <label class="field">Batch code<input id="reject-history-batch" type="search" placeholder="Batch code" /></label>
+              <label class="field">From<input id="reject-history-from" type="date" lang="en-GB" /></label>
+              <label class="field">To<input id="reject-history-to" type="date" lang="en-GB" /></label>
+            </div>
+            <div id="reject-history-body" class="reject-history-body"></div>
           </div>
         </section>
       </main>

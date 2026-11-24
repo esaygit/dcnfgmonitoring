@@ -9,15 +9,16 @@ import { openDrawer } from "./drawer";
 import { exportToExcel, type ExportContext } from "./exportExcel";
 import { parseRecordFilters } from "../recordFilterUrl";
 import { message } from "./toast";
+import { julianDateFromBatch } from "../julianDate";
 
-const search = $<HTMLInputElement>("#search-input"), dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), sortFilter = $<HTMLSelectElement>("#sort-filter");
+const search = $<HTMLInputElement>("#search-input"), dateFrom = $<HTMLInputElement>("#date-from-filter"), dateTo = $<HTMLInputElement>("#date-to-filter"), batchFilter = $<HTMLInputElement>("#batch-filter"), palletFilter = $<HTMLInputElement>("#pallet-filter"), itemFilter = $<HTMLSelectElement>("#item-filter"), sortFilter = $<HTMLSelectElement>("#sort-filter");
 const clearFilters = $<HTMLButtonElement>("#clear-filters-button"), refresh = $<HTMLButtonElement>("#refresh-button"), exportButton = $<HTMLButtonElement>("#export-button");
 const recordsTable = $<HTMLTableElement>("#records-table"), recordsHead = $<HTMLTableSectionElement>("#records-table thead"), recordsBody = $<HTMLTableSectionElement>("#records-table tbody");
 const recordsDescription = $<HTMLElement>("#records-description"), recordsTotalQuantity = $<HTMLElement>("#records-total-quantity"), recordsQuantityNote = $<HTMLElement>("#records-quantity-note"), recordsDuplicateWarning = $<HTMLParagraphElement>("#records-duplicate-warning");
 const pageInfo = $<HTMLElement>("#page-info"), pageSizeSelect = $<HTMLSelectElement>("#page-size"), pagePrev = $<HTMLButtonElement>("#page-prev"), pageNext = $<HTMLButtonElement>("#page-next"), pagination = $<HTMLElement>("#records-pagination");
 const summaryEl = $<HTMLElement>(".records-summary");
 
-const RECORD_HEADERS = HEADERS;
+const RECORD_HEADERS = [...HEADERS.slice(0, 8), "Production Date", ...HEADERS.slice(8)] as readonly string[];
 const HIDDEN_KEY = "dcn.hiddenColumns";
 const LOCKED = new Set<number>([0]); // the reference column cannot be hidden
 let page = 0, pageSize = Number(pageSizeSelect.value) || 50, requestId = 0;
@@ -40,9 +41,22 @@ function loadHidden() {
 function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* storage unavailable */ } }
 
 function filters(): RecordFilters {
-  return { query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, item: itemFilter.value, sort: sortFilter.value as SortMode };
+  return { query: search.value, dateFrom: dateFrom.value, dateTo: dateTo.value, batch: batchFilter.value, pallet: palletFilter.value, item: itemFilter.value, sort: sortFilter.value as SortMode };
 }
-const isFiltered = (f: RecordFilters) => Boolean(f.query.trim() || f.dateFrom || f.dateTo || f.batch.trim() || f.item);
+const isFiltered = (f: RecordFilters) => Boolean(f.query.trim() || f.dateFrom || f.dateTo || f.batch.trim() || f.pallet.trim() || f.item);
+
+function syncFilterUrl() {
+  const f = filters(), params = new URLSearchParams();
+  if (f.query.trim()) params.set("query", f.query.trim());
+  if (f.dateFrom) params.set("from", f.dateFrom);
+  if (f.dateTo) params.set("to", f.dateTo);
+  if (f.batch.trim()) params.set("batch", f.batch.trim());
+  if (f.pallet.trim()) params.set("pallet", f.pallet.trim());
+  if (f.item) params.set("item", f.item);
+  if (f.sort !== "date-desc") params.set("sort", f.sort);
+  const hash = `#/records${params.size ? `?${params.toString()}` : ""}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+}
 
 /** Text and values describing the current filters, used by the Excel export. */
 export function describeFilters(): ExportContext {
@@ -53,8 +67,9 @@ export function describeFilters(): ExportContext {
     to ? `Date to ${displayDate(to)}` : "",
     f.item ? `Item ${itemFilterName(f.item)}` : "",
     f.batch.trim() ? `Batch code contains "${f.batch.trim()}"` : "",
+    f.pallet.trim() ? `Pallet number "${f.pallet.trim()}"` : "",
   ].filter(Boolean);
-  return { text: parts.length ? parts.join("; ") : "none (all records)", from, to, batch: f.batch.trim() };
+  return { text: parts.length ? parts.join("; ") : "none (all records)", from, to, batch: f.batch.trim(), pallet: f.pallet.trim() };
 }
 
 export async function loadRecords() {
@@ -115,16 +130,18 @@ function render() {
         body.append(line);
       });
     };
-    const values = [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])];
+    const productionDate = (transfer: (typeof members)[number]) => transfer.production_date?.trim() || julianDateFromBatch(transfer.batch_code)?.date || "";
+    const values = [first.transaction_reference, displayDate(first.document_date), first.transferred_from, first.transferred_to, first.item_code, first.description, first.product_code ?? "", "", "", "", palletLines([...new Set(members.flatMap((transfer) => transfer.pallets))])];
     values.forEach((value, index) => {
       const td = document.createElement("td"), body = document.createElement("div");
       td.dataset.label = RECORD_HEADERS[index]; body.className = "cell-body";
       if (hidden.has(index)) td.classList.add("col-hidden");
       if (index === 7) { td.classList.add("stacked"); stackCell(body, (transfer) => transfer.batch_code ?? ""); }
-      else if (index === 8) { td.classList.add("stacked"); stackCell(body, (transfer) => fmt(Number(transfer.quantity))); }
+      else if (index === 8) { td.classList.add("stacked"); stackCell(body, (transfer) => { const date = productionDate(transfer); return date ? displayDate(date) : "Invalid"; }); }
+      else if (index === 9) { td.classList.add("stacked"); stackCell(body, (transfer) => fmt(Number(transfer.quantity))); }
       else {
         body.textContent = value;
-        if (index === 9) td.classList.add("stacked");
+        if (index === 10) td.classList.add("stacked");
         if (index === 0 && duplicateIds.size) { const badge = document.createElement("span"); badge.className = "dup-badge"; badge.textContent = "Possible duplicate"; badge.title = "A batch in this transaction matches another saved record (same quantity and pallet number)."; body.append(badge); }
       }
       td.append(body); tr.append(td);
@@ -177,18 +194,19 @@ export function initRecords() {
   if (hashQuery) {
     const shared = parseRecordFilters(hashQuery);
     search.value = shared.query ?? ""; dateFrom.value = shared.dateFrom ?? ""; dateTo.value = shared.dateTo ?? "";
-    batchFilter.value = shared.batch ?? ""; itemFilter.value = shared.item ?? ""; sortFilter.value = shared.sort ?? "date-desc";
+    batchFilter.value = shared.batch ?? ""; palletFilter.value = shared.pallet ?? ""; itemFilter.value = shared.item ?? ""; sortFilter.value = shared.sort ?? "date-desc";
   }
   syncItemPicker = buildItemPicker(itemFilter);
   buildColumnPicker();
 
-  const reloadFromStart = () => { page = 0; void loadRecords(); };
+  const reloadFromStart = () => { page = 0; syncFilterUrl(); void loadRecords(); };
   const reloadSoon = debounce(reloadFromStart, 300);
   search.addEventListener("input", reloadSoon);
   batchFilter.addEventListener("input", reloadSoon);
+  palletFilter.addEventListener("input", reloadSoon);
   for (const control of [dateFrom, dateTo, itemFilter, sortFilter]) control.addEventListener("change", reloadFromStart);
   clearFilters.addEventListener("click", () => {
-    dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; itemFilter.value = ""; sortFilter.value = "date-desc"; search.value = "";
+    dateFrom.value = ""; dateTo.value = ""; batchFilter.value = ""; palletFilter.value = ""; itemFilter.value = ""; sortFilter.value = "date-desc"; search.value = "";
     syncItemPicker(); reloadFromStart();
   });
   refresh.addEventListener("click", () => void loadRecords());
@@ -218,16 +236,18 @@ export function applyRecordFiltersFromUrl(searchParams: string) {
     dateFrom: shared.dateFrom ?? "",
     dateTo: shared.dateTo ?? "",
     batch: shared.batch ?? "",
+    pallet: shared.pallet ?? "",
     item: shared.item ?? "",
     sort: shared.sort ?? "date-desc",
   };
   const changed = search.value !== next.query || dateFrom.value !== next.dateFrom || dateTo.value !== next.dateTo ||
-    batchFilter.value !== next.batch || itemFilter.value !== next.item || sortFilter.value !== next.sort;
+    batchFilter.value !== next.batch || palletFilter.value !== (next.pallet ?? "") || itemFilter.value !== next.item || sortFilter.value !== next.sort;
   if (!changed) return;
   search.value = next.query;
   dateFrom.value = next.dateFrom;
   dateTo.value = next.dateTo;
   batchFilter.value = next.batch;
+  palletFilter.value = next.pallet ?? "";
   itemFilter.value = next.item;
   sortFilter.value = next.sort;
   syncItemPicker();

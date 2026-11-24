@@ -1,6 +1,7 @@
 import { $ } from "../dom";
 import type { Transfer } from "../types";
 import { displayDate, fmt } from "../utils";
+import { julianDateFromBatch } from "../julianDate";
 
 const drawer = $<HTMLElement>("#drawer"), backdrop = $<HTMLElement>("#drawer-backdrop"), body = $<HTMLElement>("#drawer-body"), title = $<HTMLElement>("#drawer-title"), closeButton = $<HTMLButtonElement>("#drawer-close");
 let lastFocus: HTMLElement | null = null;
@@ -44,15 +45,16 @@ function buildDetails(members: Transfer[]) {
   const section = document.createElement("section"), heading = document.createElement("h3"), scroller = document.createElement("div"), table = document.createElement("table");
   heading.textContent = `Batches (${members.length})`;
   scroller.className = "table-wrap";
-  table.innerHTML = "<thead><tr><th>Batch code</th><th class=\"num\">Quantity</th><th>Pallets</th><th></th></tr></thead>";
+  table.innerHTML = "<thead><tr><th>Batch code</th><th>Production date</th><th class=\"num\">Quantity</th><th>Pallets</th><th></th></tr></thead>";
   const tbody = document.createElement("tbody");
   for (const transfer of members) {
     const tr = document.createElement("tr");
-    const cells = [transfer.batch_code ?? "—", fmt(Number(transfer.quantity || 0)), transfer.pallets.join(", ") || "—"];
+    const productionDate = transfer.production_date?.trim() || julianDateFromBatch(transfer.batch_code)?.date || "";
+    const cells = [transfer.batch_code ?? "—", productionDate ? displayDate(productionDate) : "Invalid", fmt(Number(transfer.quantity || 0)), transfer.pallets.join(", ") || "—"];
     cells.forEach((text, index) => {
       const td = document.createElement("td");
       td.textContent = text;
-      if (index === 1) td.className = "num";
+      if (index === 2) td.className = "num";
       tr.append(td);
     });
     const flag = document.createElement("td");

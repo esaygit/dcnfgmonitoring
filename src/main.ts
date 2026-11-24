@@ -12,6 +12,7 @@ import { applyRecordFiltersFromUrl, initRecords, loadRecords } from "./ui/record
 import { loadOverview } from "./ui/overview";
 import { initAnalytics, loadAnalytics } from "./ui/analytics";
 import { initImport } from "./ui/importPage";
+import { initRejects } from "./ui/rejects";
 
 const authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email"), userAvatar = $<HTMLElement>("#user-avatar");
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
@@ -24,7 +25,7 @@ async function refreshAll() {
 const scheduleRefresh = debounce(() => void refreshAll(), 500);
 
 // ---- Routing ----
-const PAGES = ["overview", "analytics", "import", "records"];
+const PAGES = ["overview", "analytics", "import", "records", "rejects"];
 function route() {
   const hash = location.hash.replace(/^#\//, "").split("?", 1)[0], name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
   const searchParams = location.hash.split("?")[1];
@@ -62,6 +63,7 @@ initDrawer();
 initRecords();
 initAnalytics();
 initImport(refreshAll);
+initRejects();
 
 if (!supabase) {
   message("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to GitHub Actions secrets.", "error");

@@ -114,7 +114,7 @@ export async function loadAnalytics() {
   try {
     const comparison = comparisonRange(from, to);
     const filters = (dateFrom: string, dateTo: string): RecordFilters => ({
-      query: "", dateFrom, dateTo, batch: "", item: "", sort: "date-desc",
+      query: "", dateFrom, dateTo, batch: "", pallet: "", item: "", sort: "date-desc",
     });
     const [stats, records, previousStats, previousRecords] = await Promise.all([
       fetchStats(from || null, to || null),
