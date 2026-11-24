@@ -351,7 +351,7 @@
               <div><h2>New rejection</h2><p class="muted">Enter a batch and rejected quantity. Current available and remaining quantities are calculated automatically.</p></div>
             </div>
             <div class="reject-header-grid">
-              <label class="field">Rejection reference (optional)<input id="reject-reference" type="text" placeholder="e.g. GAA000011 (generated if blank)" autocomplete="off" /></label>
+              <label class="field">Rejection reference<input id="reject-reference" type="text" placeholder="e.g. GAA000011" autocomplete="off" required /></label>
             </div>
             <div id="reject-lines" class="reject-lines"></div>
             <datalist id="reject-batch-options"></datalist>
@@ -371,7 +371,6 @@
               <div><h2>Rejection history</h2><p class="muted">Search recorded rejection transactions and open their audit details.</p></div>
             </div>
             <div class="reject-history-filters">
-              <label class="field">Reference<input id="reject-history-reference" type="search" placeholder="LR-" /></label>
               <label class="field">Batch code<input id="reject-history-batch" type="search" placeholder="Batch code" /></label>
               <label class="field">From<input id="reject-history-from" type="date" lang="en-GB" /></label>
               <label class="field">To<input id="reject-history-to" type="date" lang="en-GB" /></label>

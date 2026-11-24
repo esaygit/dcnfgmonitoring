@@ -13,6 +13,20 @@ create table if not exists public.loading_rejections (
   constraint loading_rejections_reference_unique unique (rejection_reference)
 );
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.loading_rejections'::regclass
+      and conname = 'loading_rejections_reference_required'
+  ) then
+    alter table public.loading_rejections
+      add constraint loading_rejections_reference_required
+      check (btrim(rejection_reference) <> '');
+  end if;
+end;
+$$;
+
 create table if not exists public.loading_rejection_items (
   id uuid primary key default gen_random_uuid(),
   rejection_id uuid not null references public.loading_rejections(id) on delete restrict,
@@ -150,7 +164,7 @@ begin
 
   v_reference := btrim(coalesce(p_rejection_reference, ''));
   if v_reference = '' then
-    v_reference := 'LR-' || to_char(clock_timestamp(), 'YYYYMMDD') || '-' || upper(substr(md5(random()::text), 1, 8));
+    raise exception 'Rejection reference is required';
   end if;
 
   if exists (select 1 from public.loading_rejections h where h.rejection_reference = v_reference) then

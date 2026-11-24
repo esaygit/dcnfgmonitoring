@@ -12,7 +12,6 @@ const errors = $<HTMLElement>("#reject-errors");
 const preview = $<HTMLElement>("#reject-preview");
 const confirmActions = $<HTMLElement>("#reject-confirm-actions");
 const confirmButton = $<HTMLButtonElement>("#reject-confirm");
-const historyReference = $<HTMLInputElement>("#reject-history-reference");
 const historyBatch = $<HTMLInputElement>("#reject-history-batch");
 const historyFrom = $<HTMLInputElement>("#reject-history-from");
 const historyTo = $<HTMLInputElement>("#reject-history-to");
@@ -130,6 +129,7 @@ function validateLines() {
 
 function showReview() {
   const result = validateLines();
+  if (!reference.value.trim()) result.errors.unshift("Rejection reference is required.");
   if (result.errors.length) {
     errors.textContent = result.errors.join(" ");
     errors.classList.remove("hidden");
@@ -172,7 +172,6 @@ async function loadHistory() {
   historyBody.innerHTML = `<p class="muted">Loading rejection history…</p>`;
   try {
     const rows = await fetchRejectionHistory(
-      historyReference.value.trim(),
       historyBatch.value.trim(),
       normalizedDate(historyFrom.value) || null,
       normalizedDate(historyTo.value) || null,
@@ -249,8 +248,15 @@ export function initRejects() {
 
   $<HTMLButtonElement>("#reject-add-line").addEventListener("click", () => addLine());
   $<HTMLButtonElement>("#reject-review").addEventListener("click", showReview);
+  reference.addEventListener("input", hideReview);
   confirmButton.addEventListener("click", async () => {
     if (!reviewedLines) return;
+    if (!reference.value.trim()) {
+      errors.textContent = "Rejection reference is required.";
+      errors.classList.remove("hidden");
+      confirmActions.classList.remove("hidden");
+      return;
+    }
     confirmButton.disabled = true;
     try {
       const result = await submitLoadingRejection(reference.value.trim(), todayIso(), reviewedLines);
@@ -270,7 +276,7 @@ export function initRejects() {
     }
   });
 
-  [historyReference, historyBatch, historyFrom, historyTo].forEach((control) => {
+  [historyBatch, historyFrom, historyTo].forEach((control) => {
     control.addEventListener(control instanceof HTMLInputElement && control.type === "search" ? "input" : "change", () => void loadHistory());
   });
 }

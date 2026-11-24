@@ -80,6 +80,9 @@ body.drawer-open { overflow: hidden; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 20px;
 }
+.reject-line input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.reject-line input[type="number"]::-webkit-inner-spin-button,
+.reject-line input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 .reject-lines { display: grid; gap: 16px; margin-top: 24px; }
 .reject-line {
   position: relative;
@@ -128,7 +131,7 @@ body.drawer-open { overflow: hidden; }
 .reject-preview table,
 .reject-history table,
 .reject-history-detail table { min-width: 760px; }
-.reject-history-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.reject-history-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .reject-empty { padding: 32px 16px; text-align: center; color: var(--ink-2); }
 .reject-history-body { display: grid; gap: 16px; }
 

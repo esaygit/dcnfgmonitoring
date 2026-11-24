@@ -146,9 +146,9 @@ export async function submitLoadingRejection(reference: string, date: string, li
   return data as { id: string; rejection_reference: string } | null;
 }
 
-export async function fetchRejectionHistory(reference = "", batch = "", from: string | null = null, to: string | null = null): Promise<RejectionHistory[]> {
+export async function fetchRejectionHistory(batch = "", from: string | null = null, to: string | null = null): Promise<RejectionHistory[]> {
   const { data, error } = await client().rpc("loading_rejection_history", {
-    p_reference: reference,
+    p_reference: "",
     p_batch: batch,
     p_from: from,
     p_to: to,
