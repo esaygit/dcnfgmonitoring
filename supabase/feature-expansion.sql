@@ -108,7 +108,7 @@ as $$
     from candidates c
   )
   select batch_code, item_code, warehouse_code, description,
-         greatest(original_quantity, 0),
+         greatest(available_quantity, 0),
          greatest(available_quantity, 0)
   from balances
   order by batch_code, warehouse_code
@@ -131,10 +131,9 @@ declare
   v_item text;
   v_warehouse text;
   v_quantity numeric;
-  v_remarks text;
   v_available numeric;
-  v_original numeric;
   v_key text;
+  v_candidate_count integer;
 begin
   if v_user is null then
     raise exception 'Authentication is required';
@@ -142,7 +141,10 @@ begin
   if p_rejection_date is null then
     raise exception 'Rejection date is required';
   end if;
-  if p_lines is null or jsonb_array_length(p_lines) = 0 then
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' then
+    raise exception 'Rejection lines must be a JSON array';
+  end if;
+  if jsonb_array_length(p_lines) = 0 then
     raise exception 'At least one rejection line is required';
   end if;
 
@@ -158,27 +160,20 @@ begin
   for v_line in select * from jsonb_array_elements(p_lines)
   loop
     v_batch := btrim(coalesce(v_line ->> 'batch_code', ''));
-    v_item := btrim(coalesce(v_line ->> 'item_code', ''));
-    v_warehouse := btrim(coalesce(v_line ->> 'warehouse_code', ''));
     v_quantity := nullif(btrim(coalesce(v_line ->> 'rejected_quantity', '')), '')::numeric;
-    v_remarks := btrim(coalesce(v_line ->> 'remarks', ''));
 
-    if v_batch = '' or v_item = '' or v_warehouse = '' then
-      raise exception 'Batch, item, and warehouse are required';
+    if v_batch = '' then
+      raise exception 'Batch code is required';
     end if;
     if v_quantity is null or v_quantity <= 0 then
       raise exception 'Rejected quantity must be greater than zero for batch %', v_batch;
     end if;
-    if v_remarks = '' then
-      raise exception 'Remarks are required for batch %', v_batch;
-    end if;
   end loop;
 
   for v_key in
-    select distinct lower(btrim(l ->> 'warehouse_code')) || E'\x1f' ||
-                    lower(btrim(l ->> 'batch_code')) || E'\x1f' ||
-                    lower(btrim(l ->> 'item_code'))
+    select distinct lower(btrim(l ->> 'batch_code'))
     from jsonb_array_elements(p_lines) l
+    order by 1
   loop
     perform pg_advisory_xact_lock(hashtext(v_key));
   end loop;
@@ -186,9 +181,7 @@ begin
   if (
     select count(*)
     from (
-      select lower(btrim(l ->> 'batch_code')) || E'\x1f' ||
-             lower(btrim(l ->> 'item_code')) || E'\x1f' ||
-             lower(btrim(l ->> 'warehouse_code')) as key
+      select lower(btrim(l ->> 'batch_code')) as key
       from jsonb_array_elements(p_lines) l
       group by 1
       having count(*) > 1
@@ -204,46 +197,21 @@ begin
   for v_line in select * from jsonb_array_elements(p_lines)
   loop
     v_batch := btrim(v_line ->> 'batch_code');
-    v_item := btrim(v_line ->> 'item_code');
-    v_warehouse := btrim(v_line ->> 'warehouse_code');
     v_quantity := (v_line ->> 'rejected_quantity')::numeric;
-    v_remarks := btrim(v_line ->> 'remarks');
 
-    if not exists (
-      select 1 from public.transfers t
-      where lower(btrim(t.batch_code)) = lower(v_batch)
-        and lower(btrim(t.item_code)) = lower(v_item)
-        and lower(btrim(t.transferred_to)) = lower(v_warehouse)
-    ) then
-      raise exception 'Batch % does not exist at warehouse %', v_batch, v_warehouse;
+    select count(*), max(o.item_code), max(o.warehouse_code), max(o.available_quantity)
+    into v_candidate_count, v_item, v_warehouse, v_available
+    from public.loading_rejection_options(v_batch) o
+    where lower(btrim(o.batch_code)) = lower(v_batch)
+      and o.available_quantity > 0;
+
+    if v_candidate_count = 0 then
+      raise exception 'Batch % has no positive current available quantity', v_batch;
+    end if;
+    if v_candidate_count > 1 then
+      raise exception 'Batch % has multiple current stock balances; submission is blocked until inventory is clarified', v_batch;
     end if;
 
-    select coalesce(sum(t.quantity) filter (
-             where lower(btrim(t.transferred_to)) = lower(v_warehouse)), 0)
-    into v_original
-    from public.transfers t
-    where lower(btrim(t.batch_code)) = lower(v_batch)
-      and lower(btrim(t.item_code)) = lower(v_item)
-      and (lower(btrim(t.transferred_to)) = lower(v_warehouse)
-           or lower(btrim(t.transferred_from)) = lower(v_warehouse));
-
-    v_original := coalesce(v_original, 0)
-      - coalesce((
-          select sum(t.quantity)
-          from public.transfers t
-          where lower(btrim(t.batch_code)) = lower(v_batch)
-            and lower(btrim(t.item_code)) = lower(v_item)
-            and lower(btrim(t.transferred_from)) = lower(v_warehouse)
-        ), 0)
-      - coalesce((
-          select sum(i.rejected_quantity)
-          from public.loading_rejection_items i
-          where lower(btrim(i.batch_code)) = lower(v_batch)
-            and lower(btrim(i.item_code)) = lower(v_item)
-            and lower(btrim(i.warehouse_code)) = lower(v_warehouse)
-        ), 0);
-
-    v_available := greatest(v_original, 0);
     if v_quantity > v_available then
       raise exception 'Rejected quantity for batch % exceeds available quantity (%)',
         v_batch, v_available;
@@ -254,7 +222,7 @@ begin
       rejected_quantity, original_available_quantity, remaining_quantity, remarks
     ) values (
       v_header_id, v_batch, v_item, v_warehouse,
-      v_quantity, v_available, v_available - v_quantity, v_remarks
+      v_quantity, v_available, v_available - v_quantity, 'Loading rejection'
     );
   end loop;
 

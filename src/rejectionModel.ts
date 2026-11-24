@@ -1,4 +1,21 @@
 export type RejectionQuantityInput = { quantity: number | string; available: number };
+export type BatchBalanceOption = {
+  available_quantity: number;
+  item_code: string;
+  warehouse_code: string;
+};
+
+export type BatchBalanceResolution<T extends BatchBalanceOption> =
+  | { kind: "none" }
+  | { kind: "ambiguous" }
+  | { kind: "resolved"; option: T };
+
+export function resolveBatchBalance<T extends BatchBalanceOption>(options: T[]): BatchBalanceResolution<T> {
+  const positive = options.filter((option) => Number.isFinite(option.available_quantity) && option.available_quantity > 0);
+  if (!positive.length) return { kind: "none" };
+  if (positive.length > 1) return { kind: "ambiguous" };
+  return { kind: "resolved", option: positive[0] };
+}
 
 export function remainingRejectedQuantity(quantity: number | string, available: number): number | null {
   const parsed = typeof quantity === "string" ? Number(quantity) : quantity;

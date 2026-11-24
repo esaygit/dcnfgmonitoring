@@ -348,11 +348,10 @@
 
           <div class="panel reject-entry">
             <div class="section-heading">
-              <div><h2>New rejection</h2><p class="muted">Multiple batch lines are saved atomically.</p></div>
+              <div><h2>New rejection</h2><p class="muted">Enter a batch and rejected quantity. Current available and remaining quantities are calculated automatically.</p></div>
             </div>
             <div class="reject-header-grid">
-              <label class="field">Rejection reference<input id="reject-reference" type="text" placeholder="Generated automatically" autocomplete="off" /></label>
-              <label class="field">Rejection date<input id="reject-date" type="date" lang="en-GB" required /></label>
+              <label class="field">Rejection reference (optional)<input id="reject-reference" type="text" placeholder="e.g. GAA000011 (generated if blank)" autocomplete="off" /></label>
             </div>
             <div id="reject-lines" class="reject-lines"></div>
             <datalist id="reject-batch-options"></datalist>

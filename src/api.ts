@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { canonicalItemCode, itemCodesFor } from "./constants";
-import type { DashboardStats, DuplicateProbe, ItemStat, NewTransfer, RecordFilters, RecordsPage, RejectionHistory, RejectionOption, Transfer } from "./types";
+import type { DashboardStats, DuplicateProbe, ItemStat, NewTransfer, RecordFilters, RecordsPage, RejectionHistory, RejectionOption, RejectionSubmissionLine, Transfer } from "./types";
 import { normalizedDate } from "./utils";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -136,7 +136,7 @@ export async function fetchRejectionOptions(query = ""): Promise<RejectionOption
   }));
 }
 
-export async function submitLoadingRejection(reference: string, date: string, lines: unknown[]) {
+export async function submitLoadingRejection(reference: string, date: string, lines: RejectionSubmissionLine[]) {
   const { data, error } = await client().rpc("submit_loading_rejection", {
     p_rejection_reference: reference,
     p_rejection_date: date,

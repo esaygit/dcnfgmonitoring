@@ -91,8 +91,10 @@ body.drawer-open { overflow: hidden; }
 }
 .reject-line legend { padding: 0 8px; color: var(--ink-2); font-size: 0.82rem; font-weight: 800; }
 .reject-remove { position: absolute; top: 12px; right: 12px; padding: 7px 10px; }
-.reject-line-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: 8px; }
-.reject-remarks { grid-column: 1 / -1; }
+.reject-header-grid .field { max-width: 440px; }
+.reject-line-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-top: 8px; }
+.reject-line-status { grid-column: 1 / -1; margin: 0; color: var(--ink-2); font-size: 0.84rem; }
+.reject-line-status.reject-line-error { color: var(--danger); font-weight: 700; }
 .reject-line textarea,
 .reject-entry input,
 .reject-entry select,
@@ -995,7 +997,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .reject-line-grid { grid-template-columns: minmax(0, 1fr); }
   .reject-line { padding: 16px 12px; }
   .reject-remove { position: static; margin: 0 0 12px auto; display: block; }
-  .reject-remarks { grid-column: auto; }
+  .reject-line-status { grid-column: auto; }
   .reject-entry,
   .reject-history { padding: 20px 16px; }
 }

@@ -8,7 +8,9 @@ Shared dashboard for IWTS transfer PDFs: import, review, save, browse, analyse a
 2. In the Supabase SQL editor run `supabase/server-side-records.sql` (adds `document_time`, indexes and the
    `records_page`, `dashboard_stats` and `check_duplicates` functions the app calls). Re-run this script
    after pulling changes that update its database functions.
-3. `npm install`, then `npm run dev`.
+3. Run `supabase/feature-expansion.sql` after `server-side-records.sql`. Re-run it after pulling updates to
+   rejection functions; it adds the production-date column and rejection ledger without backfilling transfers.
+4. `npm install`, then `npm run dev`.
 
 For GitHub Pages, add the same two values as repository secrets.
 

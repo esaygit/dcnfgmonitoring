@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rejectionLineKey, remainingRejectedQuantity, validateRejectedQuantity } from "./rejectionModel";
+import { rejectionLineKey, remainingRejectedQuantity, resolveBatchBalance, validateRejectedQuantity } from "./rejectionModel";
 
 describe("rejection quantity validation", () => {
   it("calculates a remaining quantity", () => {
@@ -18,5 +18,11 @@ describe("rejection quantity validation", () => {
   it("creates a normalized duplicate-line key", () => {
     expect(rejectionLineKey(" 63031H ", " 4554770121 ", " W49852 "))
       .toBe("63031h|4554770121|w49852");
+  });
+  it("only resolves a batch with one positive current balance", () => {
+    const option = { available_quantity: 80, item_code: "I1", warehouse_code: "W1" };
+    expect(resolveBatchBalance([option])).toEqual({ kind: "resolved", option });
+    expect(resolveBatchBalance([{ ...option, available_quantity: 0 }])).toEqual({ kind: "none" });
+    expect(resolveBatchBalance([option, { ...option, warehouse_code: "W2" }])).toEqual({ kind: "ambiguous" });
   });
 });

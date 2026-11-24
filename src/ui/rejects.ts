@@ -1,12 +1,11 @@
 import { $ } from "../dom";
 import { fetchRejectionHistory, fetchRejectionOptions, submitLoadingRejection } from "../api";
-import type { RejectionHistory, RejectionOption } from "../types";
+import type { RejectionHistory, RejectionOption, RejectionSubmissionLine } from "../types";
 import { displayDate, fmt, normalizedDate } from "../utils";
 import { message } from "./toast";
-import { remainingRejectedQuantity, validateRejectedQuantity } from "../rejectionModel";
+import { remainingRejectedQuantity, rejectionLineKey, resolveBatchBalance, validateRejectedQuantity } from "../rejectionModel";
 
 const reference = $<HTMLInputElement>("#reject-reference");
-const rejectionDate = $<HTMLInputElement>("#reject-date");
 const linesHost = $<HTMLElement>("#reject-lines");
 const datalist = $<HTMLDataListElement>("#reject-batch-options");
 const errors = $<HTMLElement>("#reject-errors");
@@ -20,7 +19,7 @@ const historyTo = $<HTMLInputElement>("#reject-history-to");
 const historyBody = $<HTMLElement>("#reject-history-body");
 
 let options: RejectionOption[] = [];
-let reviewedLines: unknown[] | null = null;
+let reviewedLines: RejectionSubmissionLine[] | null = null;
 
 function todayIso() {
   const now = new Date();
@@ -32,45 +31,39 @@ function candidatesForBatch(batch: string) {
   return options.filter((option) => option.batch_code.trim().toLowerCase() === batch.trim().toLowerCase());
 }
 
-function selectedOption(line: HTMLElement) {
-  const batch = line.querySelector<HTMLInputElement>('[data-field="batch"]')?.value.trim() ?? "";
-  const warehouse = line.querySelector<HTMLSelectElement>('[data-field="warehouse"]')?.value ?? "";
-  return candidatesForBatch(batch).find((option) =>
-    option.warehouse_code.toLowerCase() === warehouse.toLowerCase() ||
-    !warehouse
-  );
+function lineField<T extends HTMLElement>(line: HTMLElement, name: string) {
+  const field = line.querySelector<T>(`[data-field="${name}"]`);
+  if (!field) throw new Error(`Rejection line is missing its ${name} field.`);
+  return field;
 }
 
 function refreshLineSelection(line: HTMLElement) {
-  const batchInput = line.querySelector<HTMLInputElement>('[data-field="batch"]')!;
-  const warehouse = line.querySelector<HTMLSelectElement>('[data-field="warehouse"]')!;
-  const item = line.querySelector<HTMLInputElement>('[data-field="item"]')!;
-  const original = line.querySelector<HTMLInputElement>('[data-field="original"]')!;
-  const available = line.querySelector<HTMLInputElement>('[data-field="available"]')!;
+  const batchInput = lineField<HTMLInputElement>(line, "batch");
+  const original = lineField<HTMLInputElement>(line, "original");
+  const quantity = lineField<HTMLInputElement>(line, "quantity");
+  const status = lineField<HTMLElement>(line, "balance-status");
   const candidates = candidatesForBatch(batchInput.value);
-  const previous = warehouse.value;
-  warehouse.replaceChildren(...[...new Set(candidates.map((candidate) => candidate.warehouse_code))]
-    .map((code) => { const option = document.createElement("option"); option.value = code; option.textContent = code; return option; }));
-  if ([...warehouse.options].some((option) => option.value === previous)) warehouse.value = previous;
-  const chosen = selectedOption(line);
-  item.value = chosen?.item_code ?? "";
-  original.value = chosen ? fmt(chosen.original_quantity) : "";
-  available.value = chosen ? fmt(chosen.available_quantity) : "";
-  line.dataset.itemCode = chosen?.item_code ?? "";
+  const resolution = resolveBatchBalance(candidates);
+  const chosen = resolution.kind === "resolved" ? resolution.option : null;
+  original.value = chosen ? fmt(chosen.available_quantity) : "";
   line.dataset.available = chosen ? String(chosen.available_quantity) : "";
+  if (!batchInput.value.trim()) status.textContent = "";
+  else if (resolution.kind === "none") status.textContent = "No positive current balance found for this batch.";
+  else if (resolution.kind === "ambiguous") status.textContent = "This batch has multiple current stock balances. Contact an administrator; it cannot be selected automatically.";
+  else status.textContent = "";
+  status.classList.toggle("reject-line-error", Boolean(status.textContent));
   updateRemaining(line);
 }
 
 function updateRemaining(line: HTMLElement) {
-  const remaining = line.querySelector<HTMLInputElement>('[data-field="remaining"]')!;
-  const quantity = line.querySelector<HTMLInputElement>('[data-field="quantity"]')!;
+  const remaining = lineField<HTMLInputElement>(line, "remaining");
+  const quantity = lineField<HTMLInputElement>(line, "quantity");
   const available = Number(line.dataset.available ?? 0);
-  const rejected = Number(quantity.value);
-  const nextRemaining = remainingRejectedQuantity(rejected, available);
+  const nextRemaining = remainingRejectedQuantity(quantity.value, available);
   remaining.value = quantity.value && nextRemaining !== null ? fmt(nextRemaining) : "";
 }
 
-function addLine(option?: RejectionOption) {
+function addLine() {
   const line = document.createElement("fieldset");
   line.className = "reject-line";
   line.innerHTML = `
@@ -78,27 +71,20 @@ function addLine(option?: RejectionOption) {
     <button type="button" class="secondary reject-remove" aria-label="Remove batch line">Remove</button>
     <div class="reject-line-grid">
       <label class="field">Batch code<input data-field="batch" type="search" list="reject-batch-options" autocomplete="off" required /></label>
-      <label class="field">Warehouse<select data-field="warehouse" required></select></label>
-      <label class="field">Item code<input data-field="item" type="text" readonly /></label>
-      <label class="field">Original quantity<input data-field="original" type="text" readonly /></label>
+      <label class="field">Current available quantity<input data-field="original" type="text" readonly placeholder="Selected batch balance" /></label>
       <label class="field">Rejected quantity<input data-field="quantity" type="number" min="0.0001" step="0.0001" required /></label>
-      <label class="field">Remaining quantity<input data-field="remaining" type="text" readonly /></label>
-      <label class="field reject-remarks">Remarks<textarea data-field="remarks" rows="2" required></textarea></label>
+      <label class="field">New quantity after rejection<input data-field="remaining" type="text" readonly /></label>
+      <p class="reject-line-status" data-field="balance-status" aria-live="polite"></p>
     </div>`;
   linesHost.append(line);
 
-  line.querySelector<HTMLInputElement>('[data-field="batch"]')!.addEventListener("input", () => refreshLineSelection(line));
-  line.querySelector<HTMLSelectElement>('[data-field="warehouse"]')!.addEventListener("change", () => refreshLineSelection(line));
-  line.querySelector<HTMLInputElement>('[data-field="quantity"]')!.addEventListener("input", () => updateRemaining(line));
+  lineField<HTMLInputElement>(line, "batch").addEventListener("input", () => refreshLineSelection(line));
+  lineField<HTMLInputElement>(line, "quantity").addEventListener("input", () => updateRemaining(line));
   line.querySelector<HTMLButtonElement>(".reject-remove")!.addEventListener("click", () => {
     line.remove();
     hideReview();
   });
 
-  if (option) {
-    line.querySelector<HTMLInputElement>('[data-field="batch"]')!.value = option.batch_code;
-    refreshLineSelection(line);
-  }
   hideReview();
   return line;
 }
@@ -114,31 +100,29 @@ function hideReview() {
 
 function validateLines() {
   const lineElements = [...linesHost.querySelectorAll<HTMLElement>(".reject-line")];
-  if (!lineElements.length) return { errors: ["Add at least one batch line."], lines: [] as unknown[] };
-  const found: string[] = [], lines: unknown[] = [];
+  if (!lineElements.length) return { errors: ["Add at least one batch line."], lines: [] as RejectionSubmissionLine[] };
+  const found: string[] = [], lines: RejectionSubmissionLine[] = [];
   const keys = new Set<string>();
 
   for (const line of lineElements) {
-    const batch = line.querySelector<HTMLInputElement>('[data-field="batch"]')!.value.trim();
-    const warehouse = line.querySelector<HTMLSelectElement>('[data-field="warehouse"]')!.value.trim();
-    const item = line.dataset.itemCode?.trim() ?? "";
-    const quantityText = line.querySelector<HTMLInputElement>('[data-field="quantity"]')!.value;
-    const remarks = line.querySelector<HTMLTextAreaElement>('[data-field="remarks"]')!.value.trim();
+    const batch = lineField<HTMLInputElement>(line, "batch").value.trim();
+    const quantityText = lineField<HTMLInputElement>(line, "quantity").value;
     const quantity = Number(quantityText);
     const available = Number(line.dataset.available ?? 0);
     if (!batch) found.push("A batch code is required for every line.");
-    if (!warehouse) found.push(`Select a warehouse for batch ${batch || "—"}.`);
-    if (!item) found.push(`Batch ${batch || "—"} was not found at the selected warehouse.`);
+    const candidates = candidatesForBatch(batch);
+    const resolution = resolveBatchBalance(candidates);
+    if (batch && resolution.kind === "none") found.push(`Batch ${batch} has no positive current available quantity.`);
+    if (batch && resolution.kind === "ambiguous") found.push(`Batch ${batch} has multiple current stock balances; submission is blocked until the inventory is clarified.`);
     const quantityError = validateRejectedQuantity(quantityText, available);
     if (quantityError) found.push(`Batch ${batch || "—"}: ${quantityError}`);
-    if (!remarks) found.push(`Remarks are required for batch ${batch || "—"}.`);
-    if (batch && item && warehouse) {
-      const key = `${batch.toLowerCase()}|${item.toLowerCase()}|${warehouse.toLowerCase()}`;
-      if (keys.has(key)) found.push(`Batch ${batch} is duplicated for the same item and warehouse; consolidate it into one line.`);
+    if (batch) {
+      const key = rejectionLineKey(batch, "", "");
+      if (keys.has(key)) found.push(`Batch ${batch} is entered more than once; consolidate it into one line.`);
       keys.add(key);
     }
-    if (batch && item && warehouse && Number.isFinite(quantity) && quantity > 0 && remarks) {
-      lines.push({ batch_code: batch, item_code: item, warehouse_code: warehouse, rejected_quantity: quantity, remarks });
+    if (batch && resolution.kind === "resolved" && !quantityError) {
+      lines.push({ batch_code: batch, rejected_quantity: quantity });
     }
   }
   return { errors: [...new Set(found)], lines };
@@ -156,13 +140,20 @@ function showReview() {
   }
   reviewedLines = result.lines;
   const table = document.createElement("table");
-  table.innerHTML = "<thead><tr><th>Batch code</th><th>Item code</th><th>Warehouse</th><th class=\"num\">Rejected</th><th>Remarks</th></tr></thead>";
+  table.innerHTML = "<thead><tr><th>Batch code</th><th class=\"num\">Current available</th><th class=\"num\">Rejected</th><th class=\"num\">New quantity</th></tr></thead>";
   const tbody = document.createElement("tbody");
-  for (const line of result.lines as { batch_code: string; item_code: string; warehouse_code: string; rejected_quantity: number; remarks: string }[]) {
+  for (const line of result.lines) {
+    const balance = resolveBatchBalance(candidatesForBatch(line.batch_code));
+    if (balance.kind !== "resolved") continue;
     const tr = document.createElement("tr");
-    [line.batch_code, line.item_code, line.warehouse_code, fmt(line.rejected_quantity), line.remarks].forEach((text, index) => {
+    [
+      line.batch_code,
+      fmt(balance.option.available_quantity),
+      fmt(line.rejected_quantity),
+      fmt(balance.option.available_quantity - line.rejected_quantity),
+    ].forEach((text, index) => {
       const td = document.createElement("td"); td.textContent = text;
-      if (index === 3) td.className = "num";
+      if (index > 0) td.className = "num";
       tr.append(td);
     });
     tbody.append(tr);
@@ -254,7 +245,6 @@ function showHistoryDetail(row: RejectionHistory) {
 }
 
 export function initRejects() {
-  rejectionDate.value = todayIso();
   addLine();
 
   $<HTMLButtonElement>("#reject-add-line").addEventListener("click", () => addLine());
@@ -263,10 +253,9 @@ export function initRejects() {
     if (!reviewedLines) return;
     confirmButton.disabled = true;
     try {
-      const result = await submitLoadingRejection(reference.value.trim(), rejectionDate.value, reviewedLines);
+      const result = await submitLoadingRejection(reference.value.trim(), todayIso(), reviewedLines);
       message(`Rejection ${result?.rejection_reference ?? ""} saved successfully.`, "success");
       reference.value = "";
-      rejectionDate.value = todayIso();
       linesHost.replaceChildren();
       addLine();
       hideReview();

@@ -62,6 +62,11 @@ export type RejectionItem = {
   remarks: string;
 };
 
+export type RejectionSubmissionLine = {
+  batch_code: string;
+  rejected_quantity: number;
+};
+
 export type RejectionHistory = {
   id: string;
   rejection_reference: string;
