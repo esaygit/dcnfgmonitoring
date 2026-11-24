@@ -193,6 +193,23 @@ async function loadHistory() {
   }
 }
 
+async function loadOptions() {
+  try {
+    options = await fetchRejectionOptions();
+    datalist.replaceChildren(...[...new Set(options.map((option) => option.batch_code))].map((batch) => {
+      const item = document.createElement("option"); item.value = batch; return item;
+    }));
+    linesHost.querySelectorAll<HTMLElement>(".reject-line").forEach(refreshLineSelection);
+  } catch (error) {
+    message(error instanceof Error ? error.message : "Could not load rejection batches.", "error");
+  }
+}
+
+export function loadRejects() {
+  void loadOptions();
+  void loadHistory();
+}
+
 function renderHistory(rows: RejectionHistory[]) {
   if (!rows.length) {
     historyBody.innerHTML = `<p class="reject-empty">No rejection transactions match the current filters.</p>`;
@@ -239,12 +256,6 @@ function showHistoryDetail(row: RejectionHistory) {
 export function initRejects() {
   rejectionDate.value = todayIso();
   addLine();
-  void fetchRejectionOptions().then((next) => {
-    options = next;
-    datalist.replaceChildren(...[...new Set(next.map((option) => option.batch_code))].map((batch) => {
-      const item = document.createElement("option"); item.value = batch; return item;
-    }));
-  }).catch((error) => message(error instanceof Error ? error.message : "Could not load rejection batches.", "error"));
 
   $<HTMLButtonElement>("#reject-add-line").addEventListener("click", () => addLine());
   $<HTMLButtonElement>("#reject-review").addEventListener("click", showReview);
@@ -260,7 +271,7 @@ export function initRejects() {
       addLine();
       hideReview();
       await loadHistory();
-      void fetchRejectionOptions().then((next) => { options = next; });
+      void loadOptions();
     } catch (error) {
       errors.textContent = error instanceof Error ? error.message : "Could not save rejection.";
       errors.classList.remove("hidden");
@@ -273,5 +284,4 @@ export function initRejects() {
   [historyReference, historyBatch, historyFrom, historyTo].forEach((control) => {
     control.addEventListener(control instanceof HTMLInputElement && control.type === "search" ? "input" : "change", () => void loadHistory());
   });
-  void loadHistory();
 }

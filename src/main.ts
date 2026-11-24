@@ -12,7 +12,7 @@ import { applyRecordFiltersFromUrl, initRecords, loadRecords } from "./ui/record
 import { loadOverview } from "./ui/overview";
 import { initAnalytics, loadAnalytics } from "./ui/analytics";
 import { initImport } from "./ui/importPage";
-import { initRejects } from "./ui/rejects";
+import { initRejects, loadRejects } from "./ui/rejects";
 
 const authSection = $<HTMLElement>("#auth-section"), dashboard = $<HTMLElement>("#dashboard-section"), userPanel = $<HTMLElement>("#user-panel"), userEmail = $<HTMLElement>("#user-email"), userAvatar = $<HTMLElement>("#user-avatar");
 const authForm = $<HTMLFormElement>("#auth-form"), email = $<HTMLInputElement>("#email-input"), password = $<HTMLInputElement>("#password-input"), signIn = $<HTMLButtonElement>("#sign-in-button"), signOut = $<HTMLButtonElement>("#sign-out-button");
@@ -30,6 +30,7 @@ function route() {
   const hash = location.hash.replace(/^#\//, "").split("?", 1)[0], name = hash === "export" ? "records" : hash, current = PAGES.includes(name) ? name : "overview"; // #/export (old bookmarks) now opens Records
   const searchParams = location.hash.split("?")[1];
   if (current === "records" && searchParams !== undefined) applyRecordFiltersFromUrl(searchParams);
+  if (current === "rejects" && signedInUser) loadRejects();
   document.querySelectorAll<HTMLElement>(".page").forEach((page) => page.classList.toggle("hidden", page.dataset.page !== current));
   document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((link) => {
     const on = link.dataset.nav === current;
