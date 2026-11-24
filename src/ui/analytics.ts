@@ -108,7 +108,7 @@ function render(stats: DashboardStats) {
 export async function loadAnalytics() {
   const id = ++requestId, from = normalizedDate(fromInput.value), to = normalizedDate(toInput.value);
   const period = from || to ? `${from ? displayDate(from) : "the first record"} to ${to ? displayDate(to) : "today"}` : "";
-  rangeNote.textContent = period ? `Showing ${period}.` : "Showing all saved records.";
+  rangeNote.textContent = period ? `Showing production dates ${period}.` : "Showing all saved records.";
   totalNote.textContent = period ? "Selected period" : "All saved records";
   if (from && to && from > to) { rangeNote.textContent = "The start date is after the end date."; return; }
   try {

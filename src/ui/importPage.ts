@@ -6,6 +6,7 @@ import { descriptionForItemCode, invalidImportFields, localDuplicateIndex, sortR
 import type { NewTransfer } from "../types";
 import { clean, debounce, normalizedDate, transactionReferences } from "../utils";
 import { message } from "./toast";
+import { julianDateFromBatch } from "../julianDate";
 
 const pdf = $<HTMLInputElement>("#pdf-file"), pdfName = $<HTMLElement>("#pdf-name"), extract = $<HTMLButtonElement>("#extract-button");
 const review = $<HTMLElement>("#review-section"), reviewHead = $<HTMLTableSectionElement>("#review-table thead"), reviewBody = $<HTMLTableSectionElement>("#review-table tbody");
@@ -216,7 +217,9 @@ async function saveRows() {
     return {
       transaction_reference: clean(row["Transaction Reference"]), document_date: normalizedDate(clean(row["Document Date"]), false), document_time: rowTime.get(row) ?? null,
       transferred_from: clean(row["Transferred From"]), transferred_to: clean(row["Transferred To"]), item_code: clean(row["Item Code"]), description: clean(row.Description),
-      product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null, quantity: quantity === "" ? NaN : Number(quantity),
+      product_code: clean(row["Product Code"]) || null, batch_code: clean(row["Batch Code"]) || null,
+      production_date: julianDateFromBatch(clean(row["Batch Code"]))?.date ?? null,
+      quantity: quantity === "" ? NaN : Number(quantity),
       pallets: clean(row.Pallets).split(",").map((value) => value.trim()).filter(Boolean), source_filename: rowSource.get(row) ?? "manual entry",
     };
   });

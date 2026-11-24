@@ -1,7 +1,8 @@
 node_modules/
 dist/
 *.xlsx_updated.xlsx
-.env.local
+.env*
+!.env.example
 README.MD
 supabase/*
 !supabase/*.sql

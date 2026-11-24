@@ -1,6 +1,7 @@
 import { canonicalItemCode, groupForItemCode, ITEM_SEGMENTS } from "./constants";
 import type { Transfer } from "./types";
 import { normalizedDate } from "./utils";
+import { julianDateFromBatch } from "./julianDate";
 
 export type AnalyticsInterval = "day" | "week" | "month";
 
@@ -26,6 +27,7 @@ export type QualitySummary = {
 export type MixSeries = { itemCode: string; values: number[] };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const productionDate = (record: Transfer) => normalizedDate(record.production_date ?? "") || julianDateFromBatch(record.batch_code)?.date || "";
 
 export function bucketStart(value: string, interval: AnalyticsInterval) {
   const date = normalizedDate(value);
@@ -69,7 +71,7 @@ function labelFor(key: string, interval: AnalyticsInterval) {
 }
 
 export function buildBuckets(records: Transfer[], from: string, to: string, interval: AnalyticsInterval): AnalyticsBucket[] {
-  const dates = records.map((record) => normalizedDate(record.document_date)).filter(Boolean).sort();
+  const dates = records.map(productionDate).filter(Boolean).sort();
   const start = normalizedDate(from) || dates[0] || "";
   const end = normalizedDate(to) || dates[dates.length - 1] || "";
   if (!start || !end || start > end) return [];
@@ -87,7 +89,7 @@ export function buildBuckets(records: Transfer[], from: string, to: string, inte
   }
 
   for (const record of records) {
-    const key = bucketStart(record.document_date, interval), bucket = buckets.get(key);
+    const key = bucketStart(productionDate(record), interval), bucket = buckets.get(key);
     if (!bucket) continue;
     const code = canonicalItemCode(record.item_code), quantity = Number(record.quantity);
     if (!Number.isFinite(quantity) || !code) continue;
@@ -141,7 +143,7 @@ export function summarizeQuality(records: Transfer[]): QualitySummary {
     else if (!groupForItemCode(code)) unlisted.set(code, (unlisted.get(code) ?? 0) + 1);
     if (record.is_duplicate) {
       duplicateRecords++;
-      const week = bucketStart(record.document_date, "week");
+      const week = bucketStart(productionDate(record), "week");
       if (week) duplicates.set(week, (duplicates.get(week) ?? 0) + 1);
     }
   }

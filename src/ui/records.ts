@@ -63,8 +63,8 @@ export function describeFilters(): ExportContext {
   const f = filters(), from = normalizedDate(f.dateFrom), to = normalizedDate(f.dateTo);
   const parts = [
     f.query.trim() ? `Search contains "${f.query.trim()}"` : "",
-    from ? `Date from ${displayDate(from)}` : "",
-    to ? `Date to ${displayDate(to)}` : "",
+    from ? `Production date from ${displayDate(from)}` : "",
+    to ? `Production date to ${displayDate(to)}` : "",
     f.item ? `Item ${itemFilterName(f.item)}` : "",
     f.batch.trim() ? `Batch code contains "${f.batch.trim()}"` : "",
     f.pallet.trim() ? `Pallet number "${f.pallet.trim()}"` : "",

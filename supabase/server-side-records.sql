@@ -4,11 +4,46 @@
 -- Check the column types first; if pallets is jsonb instead of text[], tell me and I will adjust the functions.
 
 alter table public.transfers add column if not exists document_time time;
+alter table public.transfers add column if not exists production_date date;
 
 create index if not exists transfers_date_time_idx on public.transfers (document_date desc, document_time desc);
+create index if not exists transfers_production_date_idx on public.transfers (production_date);
 create index if not exists transfers_item_code_idx on public.transfers (item_code);
 create index if not exists transfers_reference_idx on public.transfers (transaction_reference);
 create index if not exists transfers_batch_norm_idx on public.transfers (lower(btrim(coalesce(batch_code, ''))));
+
+create or replace function public.batch_production_date(p_batch_code text)
+returns date
+language sql
+immutable
+parallel safe
+as $$
+  with batch_digits as (
+    select regexp_replace(coalesce(p_batch_code, ''), '[^0-9]', '', 'g') as digits
+  ),
+  parsed as (
+    select
+      case when length(digits) >= 4
+        then 2020 + substring(digits from 1 for 1)::integer
+      end as production_year,
+      case when length(digits) >= 4
+        then substring(digits from 2 for 3)::integer
+      end as julian_day
+    from batch_digits
+  )
+  select case
+    when production_year is not null
+     and julian_day between 1 and (case
+       when production_year % 4 = 0
+        and (production_year % 100 <> 0 or production_year % 400 = 0)
+       then 366
+       else 365
+     end)
+    then make_date(production_year, 1, 1) + (julian_day - 1)
+    else null
+  end
+  from parsed
+$$;
 
 -- ---------------------------------------------------------------------------
 -- records_page: one page of TRANSACTIONS (all batches of a transaction stay together),
@@ -45,8 +80,8 @@ as $$
            strpos(lower(coalesce(t.batch_code, '')), params.q) > 0 or
            strpos(lower(coalesce(t.transferred_from, '')), params.q) > 0 or
            strpos(lower(coalesce(t.transferred_to, '')), params.q) > 0)
-      and (p_from is null or t.document_date >= p_from)
-      and (p_to is null or t.document_date <= p_to)
+      and (p_from is null or coalesce(t.production_date, public.batch_production_date(t.batch_code)) >= p_from)
+      and (p_to is null or coalesce(t.production_date, public.batch_production_date(t.batch_code)) <= p_to)
       and (params.b = '' or strpos(lower(coalesce(t.batch_code, '')), params.b) > 0)
       and (p_items is null or t.item_code = any (p_items))
       and (btrim(coalesce(p_from_warehouse, '')) = '' or strpos(lower(coalesce(t.transferred_from, '')), lower(btrim(p_from_warehouse))) > 0)
@@ -119,7 +154,7 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- dashboard_stats: totals and per-item statistics, optionally for a document-date range.
+-- dashboard_stats: totals and per-item statistics, optionally for a production-date range.
 -- ---------------------------------------------------------------------------
 create or replace function public.dashboard_stats(
   p_from date default null,
@@ -132,10 +167,11 @@ as $$
            upper(regexp_replace(
              translate(coalesce(t.item_code, ''), U&'\200B\200C\200D\FEFF', ''),
              '[[:space:]]+', '', 'g'
-           )) as item_code_key
+           )) as item_code_key,
+           coalesce(t.production_date, public.batch_production_date(t.batch_code)) as effective_production_date
     from public.transfers t
-    where (p_from is null or t.document_date >= p_from)
-      and (p_to is null or t.document_date <= p_to)
+    where (p_from is null or coalesce(t.production_date, public.batch_production_date(t.batch_code)) >= p_from)
+      and (p_to is null or coalesce(t.production_date, public.batch_production_date(t.batch_code)) <= p_to)
   ),
   totals as (
     select count(*) as records,
@@ -157,7 +193,7 @@ as $$
            coalesce(sum(f.quantity), 0) as quantity,
            count(distinct nullif(btrim(f.batch_code), '')) as batches,
            count(distinct nullif(btrim(f.transferred_to), '')) as destinations,
-           max(f.document_date) as latest_date
+           max(f.effective_production_date) as latest_date
     from f
     where f.item_code_key <> ''
     group by f.item_code_key

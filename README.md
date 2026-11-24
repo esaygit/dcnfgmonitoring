@@ -5,12 +5,14 @@ Shared dashboard for IWTS transfer PDFs: import, review, save, browse, analyse a
 ## Setup
 
 1. Create `.env.local` from `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`).
-2. In the Supabase SQL editor run `supabase/server-side-records.sql` (adds `document_time`, indexes and the
-   `records_page`, `dashboard_stats` and `check_duplicates` functions the app calls). Re-run this script
+2. In the Supabase SQL editor run `supabase/server-side-records.sql` (adds `document_time`, `production_date`,
+   indexes and the `records_page`, `dashboard_stats` and `check_duplicates` functions the app calls). Re-run this script
    after pulling changes that update its database functions.
 3. Run `supabase/feature-expansion.sql` after `server-side-records.sql`. Re-run it after pulling updates to
-   rejection functions; it adds the production-date column and rejection ledger without backfilling transfers.
-4. `npm install`, then `npm run dev`.
+   rejection functions; it ensures the production-date column and adds the rejection ledger without backfilling transfers.
+4. To backfill production dates, run `supabase/backfill-production-dates.sql`. It updates dates derived from
+   batch codes and sets invalid or unparseable codes to `NULL`; batch codes are unchanged.
+5. `npm install`, then `npm run dev`.
 
 For GitHub Pages, add the same two values as repository secrets.
 

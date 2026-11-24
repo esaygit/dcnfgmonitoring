@@ -6,6 +6,7 @@ const transfer = (overrides: Partial<Transfer>): Transfer => ({
   id: "record",
   transaction_reference: "REF-1",
   document_date: "2026-10-12",
+  production_date: "2026-10-12",
   document_time: null,
   transferred_from: "DCN",
   transferred_to: "WH1",
@@ -47,6 +48,24 @@ describe("analytics time buckets", () => {
     expect(buckets[1]).toMatchObject({ key: "2026-10-13", exports50: 0, downgraded50: 0, ppm50: 0 });
   });
 
+  it("buckets analytics by production date rather than document date", () => {
+    const buckets = buildBuckets([
+      transfer({ document_date: "2026-10-12", production_date: "2026-10-14" }),
+    ], "2026-10-14", "2026-10-14", "day");
+
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatchObject({ key: "2026-10-14", exports50: 10 });
+  });
+
+  it("derives analytics production dates from Julian batch codes when not stored", () => {
+    const buckets = buildBuckets([
+      transfer({ document_date: "2026-10-12", production_date: null, batch_code: "6328" }),
+    ], "2026-11-24", "2026-11-24", "day");
+
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatchObject({ key: "2026-11-24", exports50: 10 });
+  });
+
   it("uses the configured 10 PPM export and downgraded item pairs", () => {
     const [bucket] = buildBuckets([
       transfer({ id: "export-a", item_code: "4554770148", quantity: 6 }),
@@ -79,7 +98,7 @@ describe("analytics time buckets", () => {
   it("counts missing codes, unlisted codes, and flagged duplicates by their week", () => {
     const summary = summarizeQuality([
       transfer({ id: "missing", item_code: "", is_duplicate: true }),
-      transfer({ id: "unknown", item_code: "UNKNOWN", is_duplicate: true, document_date: "2026-10-13" }),
+      transfer({ id: "unknown", item_code: "UNKNOWN", is_duplicate: true, document_date: "2026-10-19", production_date: "2026-10-13" }),
     ]);
 
     expect(summary.missingItemCode).toBe(1);

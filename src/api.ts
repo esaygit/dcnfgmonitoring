@@ -105,7 +105,7 @@ export async function fetchAllRecords(filters: RecordFilters, onProgress?: (done
   return all;
 }
 
-/** Totals and per-item statistics, optionally limited to a document-date range (YYYY-MM-DD). */
+/** Totals and per-item statistics, optionally limited to a production-date range (YYYY-MM-DD). */
 export async function fetchStats(from: string | null, to: string | null): Promise<DashboardStats> {
   const { data, error } = await client().rpc("dashboard_stats", { p_from: from, p_to: to });
   if (error) throw new Error(error.message);
