@@ -1,38 +1,24 @@
 import { $, emptyRow } from "../dom";
-import { GROUP_CLASS, groupForItemCode, ITEM_GROUPS } from "../constants";
+import { groupForItemCode, ITEM_GROUPS } from "../constants";
 import { fetchAllRecords, fetchStats } from "../api";
 import type { DashboardStats } from "../types";
 import type { RecordFilters } from "../types";
-import { analyticsRecordsHref, comparisonRange } from "../analyticsModel";
+import { comparisonRange } from "../analyticsModel";
 import { displayDate, fmt, normalizedDate, pct } from "../utils";
 import { countTo, whole } from "./motion";
 import { message } from "./toast";
 import { initAnalyticsViews, updateAnalyticsViews } from "./analyticsViews";
 
+type AnalyticsChartApi = typeof import("./analyticsCharts");
+
 const analyticsChart = $<HTMLElement>("#analytics-chart"), analyticsBody = $<HTMLTableSectionElement>("#analytics-table tbody");
 const fromInput = $<HTMLInputElement>("#analytics-from"), toInput = $<HTMLInputElement>("#analytics-to"), rangeNote = $<HTMLElement>("#analytics-range-note"), totalNote = $<HTMLElement>("#analytics-total-note");
-const DONUT_COLORS = ["#1f6fa5", "#79beee", "#3fb6a8", "#f2b84b"];
 let requestId = 0;
-
-function renderDonut(container: HTMLElement, group: string, quantities: Map<string, number>) {
-  const entry = ITEM_GROUPS.find((candidate) => candidate.group === group)!;
-  const slices = entry.items.map(([code, name], index) => ({ code, name, quantity: quantities.get(code) ?? 0, color: DONUT_COLORS[index % DONUT_COLORS.length] }));
-  const total = slices.reduce((sum, slice) => sum + slice.quantity, 0);
-  const radius = 72, circumference = 2 * Math.PI * radius, active = slices.filter((slice) => slice.quantity > 0).length, gap = active > 1 ? 3 : 0;
-  let offset = 0;
-  const arcs = slices.filter((slice) => slice.quantity > 0).map((slice) => {
-    const length = slice.quantity / total * circumference, visible = Math.max(length - gap, 0.01);
-    const arc = `<circle class="donut-arc" cx="100" cy="100" r="${radius}" fill="none" stroke="${slice.color}" stroke-width="26" stroke-dasharray="${visible} ${circumference - visible}" stroke-dashoffset="${-offset}" transform="rotate(-90 100 100)"><title>${slice.name}: ${fmt(slice.quantity)} (${pct(slice.quantity, total)})</title></circle>`;
-    offset += length;
-    return arc;
-  }).join("");
-  const legend = slices.map((slice) => `<li class="${slice.quantity ? "" : "is-zero"}"><i style="background:${slice.color}"></i><span class="legend-name"><strong>${slice.name}</strong><small>${slice.code}</small></span><span class="legend-value"><strong>${fmt(slice.quantity)}</strong><small>${pct(slice.quantity, total)}</small></span></li>`).join("");
-  container.innerHTML = `<div class="donut-figure"><svg viewBox="0 0 200 200" class="donut-svg" role="img" aria-label="${group} quantity by item code, total ${fmt(total)}"><circle cx="100" cy="100" r="${radius}" fill="none" stroke="var(--tint)" stroke-width="26"/>${arcs}</svg><div class="donut-center"><strong>${fmt(total)}</strong><span>${total ? "Total quantity" : "No data yet"}</span></div></div><ul class="donut-legend">${legend}</ul>`;
-}
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
-function render(stats: DashboardStats) {
+function render(stats: DashboardStats, charts: AnalyticsChartApi) {
+  const from = normalizedDate(fromInput.value), to = normalizedDate(toInput.value);
   const items = [...stats.items].sort((left, right) => right.quantity - left.quantity || left.itemCode.localeCompare(right.itemCode));
   const itemsQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalQuantity = stats.quantity; // every saved row, so this always matches the Overview total
@@ -63,37 +49,16 @@ function render(stats: DashboardStats) {
   reconcile.textContent = unexplained
     ? `Total ${fmt(totalQuantity)} = 10 PPM ${fmt(ppm10)} + 50 PPM ${fmt(ppm50)}${otherQuantity > 0 ? ` + item codes outside those lists ${fmt(otherQuantity)} (${other.map((item) => `${item.itemCode}: ${fmt(item.quantity)}`).join(", ")})` : ""}${noCodeQuantity > 0 ? ` + records with no item code ${fmt(noCodeQuantity)}` : ""}.`
     : "";
-  renderDonut($<HTMLElement>("#analytics-donut-10"), "10 PPM", quantities);
-  renderDonut($<HTMLElement>("#analytics-donut-50"), "50 PPM", quantities);
+  charts.renderDonut($<HTMLElement>("#analytics-donut-10"), "10 PPM", quantities, from, to);
+  charts.renderDonut($<HTMLElement>("#analytics-donut-50"), "50 PPM", quantities, from, to);
 
-  analyticsChart.innerHTML = "";
   analyticsBody.innerHTML = "";
+  charts.renderItemChart(analyticsChart, items, from, to);
   if (!items.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted analytics-empty";
-    empty.textContent = "No item-code analytics for this period. Import records or widen the date range.";
-    analyticsChart.append(empty);
     emptyRow(analyticsBody, 9, "No saved records with an item code in this period.");
     return;
   }
-  const maximum = Math.max(...items.map((item) => item.quantity));
   for (const item of items) {
-    const chartRow = document.createElement("a");
-    chartRow.className = "analytics-bar-row";
-    chartRow.href = analyticsRecordsHref(normalizedDate(fromInput.value), normalizedDate(toInput.value), item.itemCode);
-    const label = document.createElement("div"), name = document.createElement("strong"), description = document.createElement("span");
-    label.className = "analytics-bar-label"; name.textContent = item.itemCode; description.textContent = item.description || "No description";
-    label.append(name, description);
-    const track = document.createElement("div"), bar = document.createElement("span");
-    track.className = "analytics-bar-track"; track.setAttribute("role", "img"); track.setAttribute("aria-label", `${item.itemCode}: ${item.quantity.toLocaleString()} total quantity`);
-    bar.className = `analytics-bar ${GROUP_CLASS[groupForItemCode(item.itemCode) ?? ""] ?? ""}`;
-    bar.style.width = `${maximum > 0 ? item.quantity / maximum * 100 : 0}%`;
-    track.append(bar);
-    const value = document.createElement("strong");
-    value.className = "analytics-bar-value"; value.textContent = item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    chartRow.append(label, track, value);
-    analyticsChart.append(chartRow);
-
     const tr = document.createElement("tr");
     [item.itemCode, item.description || "—", String(item.transactions), item.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 }), item.transactions ? (item.quantity / item.transactions).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—", String(item.batches), String(item.pallets), String(item.destinations), item.latestDate ? displayDate(item.latestDate) : "—"].forEach((text, index) => {
       const td = document.createElement("td");
@@ -122,10 +87,11 @@ export async function loadAnalytics() {
       comparison ? fetchStats(comparison.from, comparison.to) : Promise.resolve(null),
       comparison ? fetchAllRecords(filters(comparison.from, comparison.to)) : Promise.resolve([]),
     ]);
-    if (id === requestId) {
-      render(stats);
-      updateAnalyticsViews(records, previousRecords, stats, previousStats, from, to);
-    }
+    if (id !== requestId) return;
+    const charts = await import("./analyticsCharts");
+    if (id !== requestId) return;
+    render(stats, charts);
+    updateAnalyticsViews(records, previousRecords, stats, previousStats, from, to, charts);
   } catch (error) {
     if (id === requestId) message(`Could not load analytics: ${error instanceof Error ? error.message : "unexpected error"}`, "error");
   }

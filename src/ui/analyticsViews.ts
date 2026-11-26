@@ -2,8 +2,8 @@ import { groupForItemCode } from "../constants";
 import { buildBuckets, bucketRange, comparisonRange, percentChange, summarizeQuality, type AnalyticsInterval } from "../analyticsModel";
 import type { DashboardStats, Transfer } from "../types";
 import { displayDate, fmt } from "../utils";
-import { renderMixChart, renderTrendChart, renderVolumeChart } from "./analyticsCharts";
 
+type AnalyticsChartApi = typeof import("./analyticsCharts");
 type AnalyticsViewState = {
   records: Transfer[];
   previousRecords: Transfer[];
@@ -26,6 +26,7 @@ const trendNote = document.querySelector<HTMLElement>("#analytics-trend-note")!;
 let qualityGroup = "50 PPM";
 let interval: AnalyticsInterval = "day";
 let state: AnalyticsViewState | null = null;
+let chartApi: AnalyticsChartApi | null = null;
 
 const groupQuantity = (stats: DashboardStats, group: string) => stats.items.reduce((sum, item) => groupForItemCode(item.itemCode) === group ? sum + item.quantity : sum, 0);
 
@@ -97,15 +98,15 @@ function renderQuality(records: Transfer[], from: string, to: string) {
 }
 
 function renderActiveView() {
-  if (!state) return;
+  if (!state || !chartApi) return;
   const current = buildBuckets(state.records, state.from, state.to, interval);
   const previous = state.comparison
     ? buildBuckets(state.previousRecords, state.comparison.from, state.comparison.to, interval)
     : [];
-  renderTrendChart(trendChart, current, previous, qualityGroup, interval, state.from, state.to, state.comparison);
-  renderVolumeChart(volumeChart, current, interval, state.from, state.to);
-  renderMixChart(mix10Chart, current, "10 PPM", state.from, state.to);
-  renderMixChart(mix50Chart, current, "50 PPM", state.from, state.to);
+  chartApi.renderTrendChart(trendChart, current, previous, qualityGroup, interval, state.from, state.to, state.comparison);
+  chartApi.renderVolumeChart(volumeChart, current, interval, state.from, state.to);
+  chartApi.renderMixChart(mix10Chart, current, "10 PPM", state.from, state.to);
+  chartApi.renderMixChart(mix50Chart, current, "50 PPM", state.from, state.to);
   trendNote.textContent = `Export and downgraded quantities for ${qualityGroup}.`;
 }
 
@@ -121,6 +122,7 @@ function selectTab(tab: HTMLButtonElement) {
     panel.hidden = !selected;
     panel.classList.toggle("hidden", !selected);
   });
+  if (chartApi) requestAnimationFrame(chartApi.resizeAnalyticsCharts);
 }
 
 export function initAnalyticsViews() {
@@ -154,7 +156,9 @@ export function updateAnalyticsViews(
   previousStats: DashboardStats | null,
   from: string,
   to: string,
+  charts: AnalyticsChartApi,
 ) {
+  chartApi = charts;
   const comparison = comparisonRange(from, to);
   state = { records, previousRecords, from, to, comparison };
   updateKpis(stats, previousStats, comparison);

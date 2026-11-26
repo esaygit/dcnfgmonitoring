@@ -12,6 +12,7 @@ function apply(theme: Theme) {
   document.documentElement.dataset.theme = theme;
   $<HTMLButtonElement>("#theme-toggle").setAttribute("aria-pressed", String(theme === "dark"));
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#0b1721" : "#79BEEE");
+  window.dispatchEvent(new Event("dcn:themechange"));
 }
 
 export function initTheme() {

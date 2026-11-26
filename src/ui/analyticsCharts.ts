@@ -1,75 +1,185 @@
-import { ITEM_GROUPS } from "../constants";
+import * as echarts from "echarts/core";
+import { BarChart, LineChart, PieChart } from "echarts/charts";
+import { GraphicComponent, GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import type { ECharts, EChartsCoreOption } from "echarts/core";
+import { CanvasRenderer } from "echarts/renderers";
+import { ITEM_GROUPS, groupForItemCode } from "../constants";
 import { analyticsRecordsHref, bucketRange, buildMixSeries, type AnalyticsBucket, type AnalyticsInterval } from "../analyticsModel";
-import { fmt } from "../utils";
+import { fmt, pct } from "../utils";
 
-const NS = "http://www.w3.org/2000/svg";
-const WIDTH = 760, HEIGHT = 260, LEFT = 54, RIGHT = 18, TOP = 16, BOTTOM = 42;
+echarts.use([GraphicComponent, GridComponent, LegendComponent, TooltipComponent, BarChart, LineChart, PieChart, CanvasRenderer]);
+
+type ChartColors = {
+  accent: string;
+  sky: string;
+  ink: string;
+  muted: string;
+  line: string;
+  surface: string;
+  raised: string;
+  teal: string;
+  fontFamily: string;
+  palette: string[];
+};
+
+type ChartInstance = {
+  chart: ECharts;
+  observer: ResizeObserver;
+  option: () => EChartsCoreOption;
+};
+
+type ChartLink = { href: string; label: string };
+
 const ITEM_COLORS = ["#155b94", "#438fc1", "#79beee", "#abd8f3", "#087f8c", "#32a6a6", "#70c2b5", "#a9d9c9"];
+const instances = new Map<HTMLElement, ChartInstance>();
 
-function svgNode<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}, text?: string) {
-  const node = document.createElementNS(NS, tag);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-function chartSvg(label: string) {
-  const svg = svgNode("svg", { viewBox: `0 0 ${WIDTH} ${HEIGHT}`, role: "group", "aria-label": label });
-  svg.classList.add("analytics-svg");
-  return svg;
-}
-
-function addAxis(svg: SVGSVGElement, max: number) {
-  const chartHeight = HEIGHT - TOP - BOTTOM, chartWidth = WIDTH - LEFT - RIGHT;
-  const upper = Math.max(1, Math.ceil(max / 3) * 3);
-  for (let tick = 0; tick <= 3; tick++) {
-    const value = upper * tick / 3, y = TOP + chartHeight - (value / upper) * chartHeight;
-    svg.append(
-      svgNode("line", { x1: LEFT, x2: WIDTH - RIGHT, y1: y, y2: y, class: "analytics-gridline" }),
-      svgNode("text", { x: LEFT - 10, y: y + 4, "text-anchor": "end", class: "analytics-axis-label" }, fmt(value)),
-    );
-  }
+function colors(): ChartColors {
+  const styles = getComputedStyle(document.documentElement);
+  const get = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
   return {
-    upper,
-    x: (index: number, count: number) => LEFT + (count < 2 ? chartWidth / 2 : index / (count - 1) * chartWidth),
-    y: (value: number) => TOP + chartHeight - value / upper * chartHeight,
-    chartHeight,
+    accent: get("--accent", "#1a6db0"),
+    sky: get("--sky", "#79beee"),
+    ink: get("--ink", "#0e2234"),
+    muted: get("--ink-2", "#587085"),
+    line: get("--line", "#e2e9f0"),
+    surface: get("--surface", "#ffffff"),
+    raised: get("--raised", "#f7f9fc"),
+    teal: get("--ok", "#168779"),
+    fontFamily: styles.fontFamily,
+    palette: ITEM_COLORS,
   };
 }
 
-function addXLabels(svg: SVGSVGElement, buckets: AnalyticsBucket[], x: (index: number, count: number) => number) {
-  if (!buckets.length) return;
-  const count = buckets.length, stride = Math.max(1, Math.ceil(count / 6));
-  for (let index = 0; index < count; index += stride) {
-    svg.append(svgNode("text", { x: x(index, count), y: HEIGHT - 12, "text-anchor": index === 0 ? "start" : "middle", class: "analytics-axis-label" }, buckets[index].label));
-  }
-  if ((count - 1) % stride !== 0 && count > 1) {
-    svg.append(svgNode("text", { x: x(count - 1, count), y: HEIGHT - 12, "text-anchor": "end", class: "analytics-axis-label" }, buckets[count - 1].label));
-  }
+function disposeChart(container: HTMLElement) {
+  const instance = instances.get(container);
+  if (!instance) return;
+  instance.observer.disconnect();
+  instance.chart.dispose();
+  instances.delete(container);
 }
 
-function linePath(values: number[], x: (index: number, count: number) => number, y: (value: number) => number) {
-  return values.map((value, index) => `${index ? "L" : "M"}${x(index, values.length)},${y(value)}`).join(" ");
+function showEmpty(container: HTMLElement, message: string) {
+  disposeChart(container);
+  container.replaceChildren();
+  const empty = document.createElement("p");
+  empty.className = "analytics-chart-empty";
+  empty.textContent = message;
+  container.append(empty);
 }
 
-function areaPath(values: number[], x: (index: number, count: number) => number, y: (value: number) => number, baseline: number) {
-  if (!values.length) return "";
-  return `${linePath(values, x, y)} L${x(values.length - 1, values.length)},${baseline} L${x(0, values.length)},${baseline} Z`;
-}
-
-function addLegend(container: HTMLElement, entries: { label: string; color: string; dashed?: boolean; area?: boolean }[]) {
-  const legend = document.createElement("div");
-  legend.className = "analytics-legend";
-  for (const entry of entries) {
-    const item = document.createElement("span"), mark = document.createElement("i");
-    mark.style.setProperty("--legend-color", entry.color);
-    if (entry.dashed) mark.classList.add("is-dashed");
-    if (entry.area) mark.classList.add("is-area");
-    item.append(mark, document.createTextNode(entry.label));
-    legend.append(item);
+function createChart(container: HTMLElement, label: string, height: number, buildOption: () => EChartsCoreOption, links: ChartLink[] = []) {
+  disposeChart(container);
+  const host = document.createElement("div");
+  host.className = "analytics-echart";
+  host.style.height = `${height}px`;
+  host.setAttribute("role", "img");
+  host.setAttribute("aria-label", label);
+  const linkList = document.createElement("div");
+  linkList.className = "analytics-chart-a11y";
+  linkList.setAttribute("role", "group");
+  linkList.setAttribute("aria-label", `${label} record links`);
+  for (const { href, label: linkLabel } of links) {
+    const link = document.createElement("a");
+    link.href = href;
+    link.textContent = linkLabel;
+    linkList.append(link);
   }
-  container.append(legend);
+  container.replaceChildren(host, ...(links.length ? [linkList] : []));
+
+  const chart = echarts.init(host, null, { renderer: "canvas", useCoarsePointer: true });
+  const observer = new ResizeObserver(() => chart.resize());
+  observer.observe(host);
+  const instance = { chart, observer, option: buildOption };
+  instances.set(container, instance);
+  chart.setOption(buildOption());
+  chart.on("click", ({ data }) => {
+    const href = typeof data === "object" && data !== null && "href" in data && typeof data.href === "string"
+      ? data.href
+      : "";
+    if (href.startsWith("#/records?")) window.location.hash = href;
+  });
+  return chart;
 }
+
+function baseOption(palette: ChartColors): Pick<EChartsCoreOption, "animation" | "animationDuration" | "animationEasing"> {
+  return {
+    animation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    animationDuration: 650,
+    animationEasing: "cubicOut",
+  };
+}
+
+function axisLabelColors(palette: ChartColors) {
+  return {
+    color: palette.muted,
+    fontSize: 11,
+    fontFamily: palette.fontFamily,
+    hideOverlap: true,
+  };
+}
+
+function commonXAxis(palette: ChartColors, labels: string[]) {
+  return {
+    type: "category" as const,
+    boundaryGap: false,
+    data: labels,
+    axisLine: { lineStyle: { color: palette.line } },
+    axisTick: { show: false },
+    axisLabel: { ...axisLabelColors(palette), margin: 14 },
+    splitLine: { show: false },
+  };
+}
+
+function commonYAxis(palette: ChartColors, max?: number) {
+  return {
+    type: "value" as const,
+    ...(max === undefined ? {} : { max }),
+    min: 0,
+    minInterval: 1,
+    axisLabel: { ...axisLabelColors(palette), margin: 12, formatter: (value: number) => fmt(value) },
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: { lineStyle: { color: palette.line, type: "dashed" as const } },
+  };
+}
+
+function commonLegend(palette: ChartColors) {
+  return {
+    top: 0,
+    left: 10,
+    itemWidth: 16,
+    itemHeight: 8,
+    itemGap: 22,
+    icon: "roundRect" as const,
+    textStyle: { color: palette.muted, fontFamily: palette.fontFamily, fontSize: 12 },
+    selectedMode: false as const,
+  };
+}
+
+function tooltipValue(palette: ChartColors) {
+  return {
+    trigger: "axis" as const,
+    confine: true,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
+    borderWidth: 1,
+    padding: [10, 14],
+    textStyle: { color: palette.ink, fontFamily: palette.fontFamily, fontSize: 12 },
+    axisPointer: { type: "line" as const, lineStyle: { color: palette.accent, type: "dashed" as const, opacity: 0.55 } },
+    valueFormatter: (value: number | string) => fmt(Number(value)),
+  };
+}
+
+export function resizeAnalyticsCharts() {
+  for (const { chart } of instances.values()) chart.resize();
+}
+
+window.addEventListener("dcn:themechange", () => {
+  for (const { chart, option } of instances.values()) {
+    chart.setOption(option(), true);
+    chart.resize();
+  }
+});
 
 export function renderTrendChart(
   container: HTMLElement,
@@ -81,147 +191,302 @@ export function renderTrendChart(
   to: string,
   comparison: { from: string; to: string } | null,
 ) {
-  container.replaceChildren();
   if (!current.length) {
-    container.textContent = "No dated transfers are available for this range.";
+    showEmpty(container, "No dated transfers are available for this range.");
     return;
   }
   const series = group === "50 PPM"
     ? [
-      { key: "exports50" as const, label: "Exports", filter: `group:${group}:exports`, color: "#1f6fa5" },
-      { key: "downgraded50" as const, label: "Downgraded", filter: `group:${group}:downgraded`, color: "#3fb6a8" },
+      { key: "exports50" as const, label: "Exports", filter: `group:${group}:exports` },
+      { key: "downgraded50" as const, label: "Downgraded", filter: `group:${group}:downgraded` },
     ]
     : [
-      { key: "exports10" as const, label: "Exports", filter: `group:${group}:exports`, color: "#1f6fa5" },
-      { key: "downgraded10" as const, label: "Downgraded", filter: `group:${group}:downgraded`, color: "#3fb6a8" },
+      { key: "exports10" as const, label: "Exports", filter: `group:${group}:exports` },
+      { key: "downgraded10" as const, label: "Downgraded", filter: `group:${group}:downgraded` },
     ];
   const previousValues = series.map(({ key }) => current.map((_, index) => {
     if (!previous.length) return 0;
     const previousIndex = current.length < 2 || previous.length < 2 ? 0 : Math.round(index / (current.length - 1) * (previous.length - 1));
     return previous[previousIndex][key];
   }));
-  const max = Math.max(0, ...current.flatMap((bucket) => series.map(({ key }) => bucket[key])), ...previousValues.flat());
-  const svg = chartSvg(`${group} export and downgraded quantities over time`);
-  const axis = addAxis(svg, max);
-  const baseline = HEIGHT - BOTTOM;
-  for (const entry of series) {
-    const values = current.map((bucket) => bucket[entry.key]);
-    svg.append(svgNode("path", { d: areaPath(values, axis.x, axis.y, baseline), fill: entry.color, "fill-opacity": 0.1, class: "analytics-area" }));
-  }
-  if (comparison && previous.length) {
-    series.forEach((entry, seriesIndex) => {
-      svg.append(svgNode("path", {
-        d: linePath(previousValues[seriesIndex], axis.x, axis.y),
-        fill: "none", stroke: entry.color, "stroke-width": 2, "stroke-dasharray": "6 6", opacity: 0.48,
-        class: "analytics-comparison-line",
-      }));
-    });
-  }
-  series.forEach((entry) => {
-    const values = current.map((bucket) => bucket[entry.key]);
-    svg.append(svgNode("path", { d: linePath(values, axis.x, axis.y), fill: "none", stroke: entry.color, "stroke-width": 3.5, "stroke-linejoin": "round", "stroke-linecap": "round", class: "analytics-line" }));
-    values.forEach((value, index) => {
-      const range = bucketRange(current[index].key, interval, from, to);
-      if (!range) return;
-      const link = svgNode("a", { href: analyticsRecordsHref(range.from, range.to, entry.filter), "aria-label": `${current[index].label}, ${entry.label}, ${fmt(value)} quantity` });
-      link.append(
-        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 12, class: "analytics-point-hit" }),
-        svgNode("circle", { cx: axis.x(index, values.length), cy: axis.y(value), r: 5, fill: entry.color, class: "analytics-point" }),
-        svgNode("title", {}, `${current[index].label} · ${entry.label}: ${fmt(value)}`),
-      );
-      svg.append(link);
-    });
+  const labels = current.map(({ label }) => label);
+  const links = current.flatMap((bucket) => {
+    const range = bucketRange(bucket.key, interval, from, to);
+    return range ? series.map((entry) => ({
+      href: analyticsRecordsHref(range.from, range.to, entry.filter),
+      label: `${bucket.label}, ${entry.label}: view records`,
+    })) : [];
   });
-  addXLabels(svg, current, axis.x);
-  container.append(svg);
-  const entries = series.map(({ label, color }) => ({ label, color }));
-  if (comparison && previous.length) entries.push({ label: "Previous period", color: "var(--ink-2)", dashed: true } as typeof entries[number]);
-  addLegend(container, entries);
+  createChart(container, `${group} export and downgraded quantities over time`, 340, () => {
+    const palette = colors();
+    return {
+      ...baseOption(palette),
+      tooltip: tooltipValue(palette),
+      legend: commonLegend(palette),
+      grid: { top: 48, right: 24, bottom: 42, left: 78, containLabel: false },
+      xAxis: commonXAxis(palette, labels),
+      yAxis: commonYAxis(palette),
+      series: [
+        ...series.map((entry) => ({
+          name: entry.label,
+          type: "line" as const,
+          smooth: 0.28,
+          showSymbol: current.length <= 60,
+          symbol: "circle",
+          symbolSize: 8,
+          lineStyle: { width: 3, cap: "round" as const, color: entry.label === "Exports" ? palette.accent : palette.teal },
+          itemStyle: { color: entry.label === "Exports" ? palette.accent : palette.teal, borderColor: palette.surface, borderWidth: 2 },
+          emphasis: { focus: "series" as const, scale: 1.35 },
+          data: current.map((bucket) => {
+            const range = bucketRange(bucket.key, interval, from, to);
+            return {
+              value: bucket[entry.key],
+              ...(range ? { href: analyticsRecordsHref(range.from, range.to, entry.filter) } : {}),
+            };
+          }),
+        })),
+        ...(comparison && previous.length ? series.map((entry, seriesIndex) => ({
+          name: `${entry.label} · previous`,
+          type: "line" as const,
+          smooth: 0.28,
+          showSymbol: false,
+          silent: true,
+          lineStyle: { width: 2, type: "dashed" as const, opacity: 0.48, color: entry.label === "Exports" ? palette.accent : palette.teal },
+          itemStyle: { color: entry.label === "Exports" ? palette.accent : palette.teal },
+          data: previousValues[seriesIndex],
+        })) : []),
+      ],
+    };
+  }, links);
 }
 
 export function renderVolumeChart(container: HTMLElement, buckets: AnalyticsBucket[], interval: AnalyticsInterval, from: string, to: string) {
-  container.replaceChildren();
   if (!buckets.length) {
-    container.textContent = "No dated transfers are available for this range.";
+    showEmpty(container, "No dated transfers are available for this range.");
     return;
   }
-  const max = Math.max(0, ...buckets.map((bucket) => bucket.ppm10 + bucket.ppm50));
-  const svg = chartSvg("Transfer quantity by time period, stacked by PPM group");
-  const axis = addAxis(svg, max), plotWidth = WIDTH - LEFT - RIGHT;
-  const slot = plotWidth / buckets.length, barWidth = Math.max(2, Math.min(20, slot * 0.68));
-  buckets.forEach((bucket, index) => {
-    const x = axis.x(index, buckets.length) - barWidth / 2;
+  const labels = buckets.map(({ label }) => label);
+  const groups = [
+    { name: "10 PPM", key: "ppm10" as const },
+    { name: "50 PPM", key: "ppm50" as const },
+  ];
+  const links = buckets.flatMap((bucket) => {
     const range = bucketRange(bucket.key, interval, from, to);
-    if (!range) return;
-    let bottom = HEIGHT - BOTTOM;
-    for (const group of [
-      { name: "10 PPM", value: bucket.ppm10, color: "#1f6fa5" },
-      { name: "50 PPM", value: bucket.ppm50, color: "#79beee" },
-    ]) {
-      if (!group.value) continue;
-      const height = group.value / axis.upper * axis.chartHeight, y = bottom - height;
-      const link = svgNode("a", { href: analyticsRecordsHref(range.from, range.to, `group:${group.name}`), "aria-label": `${bucket.label}, ${group.name}, ${fmt(group.value)} quantity` });
-      link.append(
-        svgNode("rect", { x, y, width: barWidth, height: Math.max(1, height), rx: Math.min(4, barWidth / 3), fill: group.color, class: "analytics-bar-segment" }),
-        svgNode("title", {}, `${bucket.label} · ${group.name}: ${fmt(group.value)}`),
-      );
-      svg.append(link);
-      bottom = y;
-    }
+    return range ? groups.map((group) => ({
+      href: analyticsRecordsHref(range.from, range.to, `group:${group.name}`),
+      label: `${bucket.label}, ${group.name}: view records`,
+    })) : [];
   });
-  addXLabels(svg, buckets, axis.x);
-  container.append(svg);
-  addLegend(container, [{ label: "10 PPM", color: "#1f6fa5", area: true }, { label: "50 PPM", color: "#79beee", area: true }]);
+  createChart(container, "Transfer quantity by time period, stacked by PPM group", 320, () => {
+    const palette = colors();
+    return {
+      ...baseOption(palette),
+      tooltip: tooltipValue(palette),
+      legend: commonLegend(palette),
+      grid: { top: 48, right: 24, bottom: 42, left: 78 },
+      xAxis: { ...commonXAxis(palette, labels), boundaryGap: true, axisLabel: { ...axisLabelColors(palette), margin: 14, interval: "auto" } },
+      yAxis: commonYAxis(palette),
+      series: groups.map((group) => ({
+        name: group.name,
+        type: "bar" as const,
+        stack: "quantity",
+        barMaxWidth: 24,
+        itemStyle: {
+          color: group.key === "ppm10" ? palette.accent : palette.sky,
+          borderRadius: group.key === "ppm50" ? [5, 5, 0, 0] : [0, 0, 0, 0],
+        },
+        emphasis: { focus: "series" as const },
+        data: buckets.map((bucket) => {
+          const range = bucketRange(bucket.key, interval, from, to);
+          return {
+            value: bucket[group.key],
+            ...(range ? { href: analyticsRecordsHref(range.from, range.to, `group:${group.name}`) } : {}),
+          };
+        }),
+      })),
+    };
+  }, links);
 }
 
 export function renderMixChart(container: HTMLElement, buckets: AnalyticsBucket[], group: string, from: string, to: string) {
-  container.replaceChildren();
-  const series = buildMixSeries(buckets, group);
-  if (!buckets.length || !series.length) {
-    container.textContent = `No ${group} item-code quantities are available for this range.`;
+  const mix = buildMixSeries(buckets, group);
+  if (!buckets.length || !mix.length) {
+    showEmpty(container, `No ${group} item-code quantities are available for this range.`);
     return;
   }
-  const codes = series.map(({ itemCode }) => itemCode);
-  const svg = chartSvg(`100 percent stacked area showing the ${group} item-code mix over time`);
-  const axis = addAxis(svg, 100);
-  if (buckets.length === 1) {
-    let bottom = HEIGHT - BOTTOM;
-    for (const item of series) {
-      const share = item.values[0];
-      if (!share) continue;
-      const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([itemCode]) => itemCode)).indexOf(item.itemCode) % ITEM_COLORS.length;
-      const height = share / axis.upper * axis.chartHeight, y = bottom - height;
-      const link = svgNode("a", { href: analyticsRecordsHref(from, to, item.itemCode), "aria-label": `${item.itemCode}, ${fmt(share)} percent of ${group} item mix, view records` });
-      link.append(svgNode("rect", { x: axis.x(0, 1) - 12, y, width: 24, height, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.76, class: "analytics-bar-segment" }));
-      svg.append(link);
-      bottom = y;
-    }
-    addXLabels(svg, buckets, axis.x);
-    container.append(svg);
-    addLegend(container, series.map(({ itemCode }) => ({
-      label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
-      color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
-      area: true,
-    })));
+  const labels = buckets.map(({ label }) => label);
+  const links = mix.map((item) => ({
+    href: analyticsRecordsHref(from, to, item.itemCode),
+    label: `${item.itemCode}: view ${group} records`,
+  }));
+  createChart(container, `100 percent stacked area showing the ${group} item-code mix over time`, 340, () => {
+    const palette = colors();
+    return {
+      ...baseOption(palette),
+      tooltip: tooltipValue(palette),
+      legend: {
+        ...commonLegend(palette),
+        type: "scroll",
+        left: 0,
+        right: 0,
+        itemGap: 16,
+        formatter: (name: string) => `${name} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === name)?.[1] ?? name}`,
+      },
+      grid: { top: 54, right: 24, bottom: 42, left: 62 },
+      xAxis: commonXAxis(palette, labels),
+      yAxis: {
+        ...commonYAxis(palette, 100),
+        axisLabel: { ...axisLabelColors(palette), margin: 12, formatter: (value: number) => `${value}%` },
+      },
+      series: mix.map((item, index) => ({
+        name: item.itemCode,
+        type: "line" as const,
+        stack: "share",
+        smooth: 0.25,
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: palette.surface },
+        areaStyle: { opacity: 0.86 },
+        emphasis: { focus: "series" as const, lineStyle: { width: 2.5 } },
+        itemStyle: { color: palette.palette[index % palette.palette.length] },
+        data: item.values.map((value, bucketIndex) => ({
+          value,
+          href: analyticsRecordsHref(from, to, item.itemCode),
+          bucketLabel: labels[bucketIndex],
+        })),
+      })),
+    };
+  }, links);
+}
+
+export type AnalyticsItem = { itemCode: string; description: string; quantity: number };
+
+export function renderItemChart(container: HTMLElement, items: AnalyticsItem[], from: string, to: string) {
+  if (!items.length) {
+    showEmpty(container, "No item-code analytics for this period. Import records or widen the date range.");
     return;
   }
-  for (const [seriesIndex, item] of series.entries()) {
-    const values = item.values;
-    const bottoms = buckets.map((_, index) => series.slice(0, seriesIndex).reduce((sum, prior) => sum + prior.values[index], 0));
-    const tops = values.map((value, index) => value + bottoms[index]);
-    const upperPath = tops.map((value, index) => `${index ? "L" : "M"}${axis.x(index, tops.length)},${axis.y(value)}`).join(" ");
-    const lowerPath = bottoms.map((_, index) => index).reverse().map((index) => `L${axis.x(index, bottoms.length)},${axis.y(bottoms[index])}`).join(" ");
-    const colorIndex = ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(item.itemCode) % ITEM_COLORS.length;
-    const path = svgNode("path", { d: `${upperPath} ${lowerPath} Z`, fill: ITEM_COLORS[colorIndex], "fill-opacity": 0.88, stroke: "var(--surface)", "stroke-width": 2, class: "analytics-mix-area" });
-    const link = svgNode("a", { href: analyticsRecordsHref(from, to, item.itemCode), "aria-label": `${item.itemCode}, ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === item.itemCode)?.[1] ?? item.itemCode}, view ${group} records` });
-    link.append(path, svgNode("title", {}, `${item.itemCode} · ${values.map((value, index) => `${buckets[index].label}: ${fmt(value)}%`).join(" · ")}`));
-    svg.append(link);
+  const height = Math.max(300, Math.min(780, items.length * 38 + 76));
+  const links = items.map((item) => ({
+    href: analyticsRecordsHref(from, to, item.itemCode),
+    label: `${item.itemCode}, ${fmt(item.quantity)}: view records`,
+  }));
+  createChart(container, "Total quantity by item code, highest volume first", height, () => {
+    const palette = colors();
+    return {
+      ...baseOption(palette),
+      tooltip: tooltipValue(palette),
+      grid: { top: 14, right: 62, bottom: 30, left: 92 },
+      xAxis: {
+        ...commonYAxis(palette),
+        axisLabel: { ...axisLabelColors(palette), formatter: (value: number) => fmt(value) },
+      },
+      yAxis: {
+        type: "category",
+        inverse: true,
+        data: items.map(({ itemCode }) => itemCode),
+        axisLabel: { ...axisLabelColors(palette), fontSize: 12, width: 72, overflow: "truncate" as const },
+        axisLine: { show: false },
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        barMaxWidth: 18,
+        showBackground: true,
+        backgroundStyle: { color: palette.raised, borderRadius: 9 },
+        itemStyle: { borderRadius: [0, 8, 8, 0] },
+        label: {
+          show: true,
+          position: "right",
+          color: palette.muted,
+          fontSize: 11,
+          fontFamily: palette.fontFamily,
+          formatter: ({ value }: { value: number }) => fmt(value),
+        },
+        data: items.map((item) => ({
+          value: item.quantity,
+          itemStyle: { color: groupForItemCode(item.itemCode) === "50 PPM" ? palette.sky : palette.accent },
+          itemCode: item.itemCode,
+          description: item.description,
+          href: analyticsRecordsHref(from, to, item.itemCode),
+        })),
+      }],
+    };
+  }, links);
+}
+
+export function renderDonut(container: HTMLElement, group: string, quantities: Map<string, number>, from: string, to: string) {
+  const entry = ITEM_GROUPS.find((candidate) => candidate.group === group);
+  if (!entry) {
+    showEmpty(container, `No ${group} item-code quantities are available.`);
+    return;
   }
-  addXLabels(svg, buckets, axis.x);
-  container.append(svg);
-  addLegend(container, series.map(({ itemCode }) => ({
-    label: `${itemCode} · ${ITEM_GROUPS.flatMap(({ items }) => items).find(([code]) => code === itemCode)?.[1] ?? itemCode}`,
-    color: ITEM_COLORS[ITEM_GROUPS.flatMap(({ items }) => items.map(([code]) => code)).indexOf(itemCode) % ITEM_COLORS.length],
-    area: true,
-  })));
+  const slices = entry.items.map(([code, name], index) => ({
+    code,
+    name,
+    quantity: quantities.get(code) ?? 0,
+    color: ITEM_COLORS[index % ITEM_COLORS.length],
+  }));
+  const total = slices.reduce((sum, slice) => sum + slice.quantity, 0);
+  const labelByName = new Map(slices.map((slice) => [`${slice.code} · ${slice.name}`, slice]));
+  const links = slices.filter((slice) => slice.quantity > 0).map((slice) => ({
+    href: analyticsRecordsHref(from, to, slice.code),
+    label: `${slice.name}, ${fmt(slice.quantity)}: view records`,
+  }));
+  createChart(container, `${group} quantity by item code, total ${fmt(total)}`, 270, () => {
+    const palette = colors();
+    return {
+      ...baseOption(palette),
+      tooltip: {
+        ...tooltipValue(palette),
+        trigger: "item",
+        formatter: (item: { name: string; value: number }) => {
+          const slice = labelByName.get(item.name);
+          return `${slice?.name ?? item.name}<br/>${fmt(item.value)} · ${pct(item.value, total)}`;
+        },
+      },
+      legend: {
+        type: "scroll",
+        orient: "vertical",
+        left: "53%",
+        right: 8,
+        top: "middle",
+        itemWidth: 10,
+        itemHeight: 10,
+        itemGap: 14,
+        textStyle: { color: palette.muted, fontFamily: palette.fontFamily, fontSize: 11, width: 150, overflow: "truncate" },
+        formatter: (name: string) => name,
+      },
+      graphic: [
+        {
+          type: "text",
+          left: "26%",
+          top: "44%",
+          style: { text: fmt(total), fill: palette.ink, fontSize: 20, fontWeight: 700, textAlign: "center" },
+        },
+        {
+          type: "text",
+          left: "26%",
+          top: "54%",
+          style: { text: total ? "Total quantity" : "No data yet", fill: palette.muted, fontSize: 10, textAlign: "center" },
+        },
+      ],
+      series: [{
+        name: `${group} quantity`,
+        type: "pie",
+        center: ["26%", "50%"],
+        radius: ["53%", "76%"],
+        avoidLabelOverlap: true,
+        padAngle: 2,
+        itemStyle: { borderColor: palette.surface, borderWidth: 2, borderRadius: 3 },
+        label: { show: false },
+        emphasis: { scale: true, scaleSize: 5, itemStyle: { shadowBlur: 14, shadowColor: "#0e223422" } },
+        data: slices.map((slice) => ({
+          name: `${slice.code} · ${slice.name}`,
+          value: slice.quantity,
+          itemStyle: { color: slice.color },
+          href: analyticsRecordsHref(from, to, slice.code),
+        })),
+      }],
+    };
+  }, links);
 }
